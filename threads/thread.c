@@ -24,6 +24,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* Lista de Thread durmiendo*/
+static struct list sleep_list;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -91,6 +94,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init (&sleep_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -98,6 +102,52 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+}
+
+void insert_into_sleep_list(int64_t ticks){
+
+	//Deshabilitamos interrupciones
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	/* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
+	Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
+	
+	struct thread *thread_actual = thread_current();
+  thread_actual->sleep_time = timer_ticks() + ticks;
+  
+  /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
+	  definió como paso inicial*/
+	
+  list_push_back(&sleep_list, &thread_actual->elem);
+  thread_block();
+
+  //Habilitar interrupciones
+	intr_set_level (old_level);
+}
+
+void remove_from_sleep_list(int64_t ticks){
+
+	/*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
+	Se mueve de regreso a ready_list, con la funcion thread_unblock*/
+	
+	//Iterar sobre "lista_espera"
+	struct list_elem *iter = list_begin(&sleep_list);
+	while(iter != list_end(&sleep_list) ){
+		struct thread *thread_lista_espera = list_entry(iter, struct thread, elem);
+		
+		/*Si el tiempo global es mayor al tiempo que el thread permanecía dormido
+		  entonces su tiempo de dormir ha expirado*/
+		
+		if(ticks >= thread_lista_espera->sleep_time){
+			//Lo removemos de "lista_espera" y lo regresamos a ready_list
+			iter = list_remove(iter);
+			thread_unblock(thread_lista_espera);
+		}else{
+			//Sino, seguir iterando
+			iter = list_next(iter);
+		}
+	}
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
