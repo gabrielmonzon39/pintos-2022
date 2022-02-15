@@ -337,7 +337,11 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
-  struct list_elem *e;
+  if(new_priority < thread_current()->priority)
+		thread_yield();
+	
+
+  /*struct list_elem *e;
   struct thread *t;
 
   for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
@@ -345,7 +349,7 @@ thread_set_priority (int new_priority)
     if (t->priority > new_priority) {
       thread_yield();
     }
-  }
+  }*/
 
 }
 
