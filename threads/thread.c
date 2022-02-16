@@ -331,25 +331,37 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+void donar (int priority, struct thread *holder) {
+  holder->priority = priority;
+  if (holder == thread_current() && !list_empty (&ready_list)) {
+    struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (next != NULL && next->priority > priority) {
+      thread_yield();
+    }
+  }
+  /*holder->priority_original = holder->priority;
+  holder->priority_donated = priority;*/
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-
-  if(new_priority < thread_current()->priority)
-		thread_yield();
-	
-
-  /*struct list_elem *e;
-  struct thread *t;
-
-  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
-    t = list_entry (e, struct thread, allelem);
-    if (t->priority > new_priority) {
+  //thread_current ()->priority = new_priority;
+  if (thread_current()->priority == thread_current()->priority_original) {
+    thread_current()->priority = new_priority;
+    thread_current()->priority_original = new_priority;
+  } else {
+    thread_current()->priority_original = new_priority;
+  }
+ 
+  struct thread *next;
+  if (!list_empty (&ready_list)) {
+    next = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (next != NULL && next->priority > new_priority) {
       thread_yield();
     }
-  }*/
+  }
 
 }
 
@@ -358,7 +370,6 @@ int
 thread_get_priority (void) 
 {
   return thread_current ()->priority;
-  
 }
 
 /* Sets the current thread's nice value to NICE. */
