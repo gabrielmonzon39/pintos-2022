@@ -31,6 +31,12 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+//#include "threads/thread.c"
+
+//static int guard = 0;
+
+//static struct list *blocked_list;
+//list_init(blocked_list);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -181,6 +187,7 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
+
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -199,22 +206,30 @@ lock_acquire (struct lock *lock)
   
   
 
-  if (lock->holder == NULL) {
-    lock->holder = thread_current();
-  } 
-
-  while (thread_current()->priority > lock->holder->priority) {
-    if (lock->holder == NULL) break;
-    donar(thread_current()->priority, lock->holder);
-  }
-    /*if () {
-      
-    }
+  /*if (thread_current()->priority > lock->holder->priority && lock->holder != NULL) 
+    donar(thread_current()->priority, lock->holder);*/
+  
+  /*while (testANDset(guard)) {}
+  if (lock->holder != NULL) {
+    intr_set_level(INTR_OFF);
+    list_insert(list_end(&blocked_list), &(thread_current()->elem));
     thread_block();
-    lock_release(lock);*/
+    intr_set_level(INTR_ON);
+    guard = 0;
+  } else {
+    lock->holder = thread_current();
+    guard = 0;
+  }*/
+
   lock->holder = thread_current();
 
 }
+
+/*int testANDset (int guard) {
+  int res = guard;
+  guard = 1;
+  return res;
+}*/
 
 
 
@@ -249,9 +264,23 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   sema_up (&lock->semaphore);
-
+  
+  /*while (testANDset(guard)){}
+  
+  if (!list_empty(blocked_list)) {
+    struct list_elem *a = list_pop_front(blocked_list);
+    list_push_front(&ready_list, a);
+  } else {
+    lock->holder = NULL;
+  }*/
+  
+  //guard = 0;
+  
   lock->holder = NULL;
-  donar(thread_current()->priority_original, thread_current());
+  
+  /*if (list_empty(&thread_current()->locks)) {
+    donar(thread_current()->priority_original, thread_current());
+  }*/
 
 }
 
