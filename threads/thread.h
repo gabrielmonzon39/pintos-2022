@@ -90,10 +90,12 @@ struct thread
     int priority;                       /* Priority. */
     int priority_donated;
     int priority_original;
+   
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct lock *guard;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

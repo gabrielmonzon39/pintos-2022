@@ -195,8 +195,10 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-  sema_down (&lock->semaphore);
   
+  
+  enum intr_level old_level;
+  old_level = intr_disable();
   
 
   if (lock->holder == NULL) {
@@ -212,7 +214,10 @@ lock_acquire (struct lock *lock)
     }
     thread_block();
     lock_release(lock);*/
-  lock->holder = thread_current();
+    sema_down (&lock->semaphore);
+    thread_current()->guard=NULL;
+    lock->holder = thread_current();
+    intr_set_level(old_level);
 
 }
 
@@ -248,10 +253,15 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  sema_up (&lock->semaphore);
+
+  enum intr_level old_level;
+  old_level = intr_disable(); // Busy Wait
+ 
 
   lock->holder = NULL;
-  donar(thread_current()->priority_original, thread_current());
+ 
+  sema_up(&lock -> semaphore);
+  intr_set_level (old_level);
 
 }
 
