@@ -101,7 +101,7 @@ sub parse_command_line {
 	  or exit 1;
     }
 
-    $sim = "bochs" if !defined $sim;
+    $sim = "qemu" if !defined $sim;
     $debug = "none" if !defined $debug;
     $vga = exists ($ENV{DISPLAY}) ? "window" : "none" if !defined $vga;
 
@@ -257,7 +257,7 @@ sub set_disk {
 sub find_disks {
     # Find kernel, if we don't already have one.
     if (!exists $parts{KERNEL}) {
-	my $name = find_file ('kernel.bin');
+	my $name = find_file ('/home/erick/pintos/threads/build/kernel.bin');
 	die "Cannot find kernel\n" if !defined $name;
 	do_set_part ('KERNEL', 'file', $name);
     }
@@ -624,7 +624,7 @@ sub run_qemu {
       if $vga eq 'terminal';
     print "warning: qemu doesn't support jitter\n"
       if defined $jitter;
-    my (@cmd) = ('qemu-system-i386');
+    my (@cmd) = ('qemu-system-x86_64');
     push (@cmd, '-device', 'isa-debug-exit');
 
     my ($i);
@@ -698,7 +698,6 @@ EOF
 	my ($device) = "ide" . int ($i / 2) . ":" . ($i % 2);
 	my ($pln) = "$device.pln";
 	print VMX <<EOF;
-
 $device.present = TRUE
 $device.deviceType = "plainDisk"
 $device.fileName = "$pln"
@@ -717,12 +716,9 @@ version=1
 CID=$cid
 parentCID=ffffffff
 createType="monolithicFlat"
-
 RW $geom{CAPACITY} FLAT "$dsk" 0
-
 # The Disk Data Base
 #DDB
-
 ddb.adapterType = "ide"
 ddb.virtualHWVersion = "4"
 ddb.toolsVersion = "2"

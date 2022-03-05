@@ -92,6 +92,11 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int priority_original;
+    int priority_donated;
+    struct list_elem *sleep;
+    struct lock *lock;
+    struct list locks;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -142,5 +147,7 @@ int thread_get_load_avg (void);
 
 void insert_into_sleep_list(int64_t ticks);
 void remove_from_sleep_list(int64_t ticks);
+
+void donar(int priority, struct thread *holder);
 
 #endif /* threads/thread.h */
