@@ -28,7 +28,6 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -173,11 +172,6 @@ thread_create (const char *name, int priority,
   struct switch_threads_frame *sf;
   tid_t tid;
 
-  /* Agregado */
-  int newPriority = priority;
-  int currPriority = thread_current()->priority;
-  /************/
-
   ASSERT (function != NULL);
 
   /* Allocate thread. */
@@ -207,8 +201,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if (newPriority > currPriority) thread_yield();
-  
   return tid;
 }
 
@@ -247,11 +239,6 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-
-  if (thread_current() != idle_thread)
-    if (t->priority > thread_current()) 
-      thread_yield();
-
   intr_set_level (old_level);
 }
 
@@ -344,11 +331,11 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-void donar (int priority, struct thread *thred) {
-  thred->priority = priority;
-  if (thred == thread_current() && !list_empty (&ready_list)) {
-    struct thread *firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
-    if (firstInQueue != NULL && firstInQueue->priority > priority) {
+void donar (int priority, struct thread *holder) {
+  holder->priority = priority;
+  if (holder == thread_current() && !list_empty (&ready_list)) {
+    struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (next != NULL && next->priority > priority) {
       thread_yield();
     }
   }
@@ -360,18 +347,20 @@ void donar (int priority, struct thread *thred) {
 void
 thread_set_priority (int new_priority) 
 {
-
   //thread_current ()->priority = new_priority;
   if (thread_current()->priority == thread_current()->priority_original) {
     thread_current()->priority = new_priority;
+    thread_current()->priority_original = new_priority;
+  } else {
+    thread_current()->priority_original = new_priority;
   }
-  thread_current()->priority_original = new_priority;
-
-  struct thread *firstInQueue;
-  if (!list_empty(&ready_list)) {
-    firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
-    if (firstInQueue == NULL) return;
-    if (firstInQueue->priority > new_priority) thread_yield();
+ 
+  struct thread *next;
+  if (!list_empty (&ready_list)) {
+    next = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (next != NULL && next->priority > new_priority) {
+      thread_yield();
+    }
   }
 
 }
@@ -500,7 +489,6 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->priority_original = priority; 
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
