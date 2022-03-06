@@ -116,11 +116,12 @@ sema_up (struct semaphore *sema)
   /* Siguiendo lo del V() en clase */
   // Sumar 1 y sacar a alguien de la waiting si hay
   // esto por P(). 
+  sema->value++;// se debe realizar antes la suma, para realizar el metodo V()
   if (!list_empty (&sema->waiters)) {
       list_sort(&sema->waiters, sort_priority, NULL);
       thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
   } 
-  sema->value++;
+  
   intr_set_level (old_level);
 }
 
@@ -363,7 +364,7 @@ bool sort_sema (const struct list_elem *elem1, const struct list_elem *elem2) {
   struct semaphore_elem *e2 = list_entry(elem2, struct semaphore_elem, elem);
   int p1 = e1->semaphore.priority;
   int p2 = e2->semaphore.priority;
-  if (p1 < p2) return true;
+  if (p1 > p2) return true;
   return false;
 }
 
