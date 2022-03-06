@@ -98,6 +98,9 @@ struct thread
     struct lock *lock;
     struct list locks;
 
+     struct list children_list;
+     struct child_process * waiting_child;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -108,6 +111,16 @@ struct thread
 
     int64_t sleep_time;                          /* Sleep time in ticks. */
   };
+  /*agregado*/
+
+  /*struct child_process {
+      int tid;
+      struct list_elem child_elem;   
+      int exit_status; 
+      bool if_waited;
+      struct semaphore wait_sema;
+    };
+    /*agregado*/
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -149,5 +162,7 @@ void insert_into_sleep_list(int64_t ticks);
 void remove_from_sleep_list(int64_t ticks);
 
 void donar(int priority, struct thread *holder);
+
+//bool compare_priority(const struct list_elem *, const struct list_elem *, void *);
 
 #endif /* threads/thread.h */
