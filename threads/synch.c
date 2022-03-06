@@ -368,4 +368,4 @@ bool sort_sema (const struct list_elem *elem1, const struct list_elem *elem2) {
   return false;
 }
 
-// push 38pts
+// push 38pts/100pts
