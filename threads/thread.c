@@ -24,6 +24,10 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+static struct list blocked_list;
+static struct list_elem *blockList[500];
+//static int head = 0; 
+
 /* Lista de Thread durmiendo*/
 static struct list sleep_list;
 
@@ -95,12 +99,17 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init (&blocked_list);
   list_init (&sleep_list);
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
+  
+  // Agregamos esto XD
+  list_init (&initial_thread->locks);
+  
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 }
@@ -110,7 +119,6 @@ void insert_into_sleep_list(int64_t ticks){
 	//Deshabilitamos interrupciones
 	enum intr_level old_level;
 	old_level = intr_disable ();
-
 	/* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
 	Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
 	
@@ -404,19 +412,20 @@ thread_foreach (thread_action_func *func, void *aux)
 
 void donar (int priority, struct thread *thred) {
   thred->priority = priority;
-  if (!list_empty (&ready_list)) {
+  thred->priority_donated = priority;
+
+  /*if (!list_empty (&ready_list)) {
     struct thread *firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
     if (firstInQueue == NULL) return;
     if (firstInQueue->priority > priority) thread_yield();
-  }
+  }*/
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  
-   //thread_current ()->priority = new_priority;
+  //thread_current ()->priority = new_priority;
   if (thread_current()->priority == thread_current()->priority_original) {
     thread_current()->priority = new_priority;
   }

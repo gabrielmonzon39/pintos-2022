@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -92,11 +93,14 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    struct list_elem *sleep;
+    
     int priority_original;
     int priority_donated;
-    struct list_elem *sleep;
-    struct lock *lock;
     struct list locks;
+    struct lock *wait;
+    struct list_elem donation;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -150,6 +154,11 @@ void remove_from_sleep_list(int64_t ticks);
 
 void donar(int priority, struct thread *holder);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
+static struct list sleep_list;
+
+static struct list blocked_list;
+static struct list_elem *blockList[500];
+static int head = 0;  
 
 #endif /* threads/thread.h */
 //push 38pts/100pts

@@ -201,21 +201,47 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
 
-  //if (lock->holder == NULL) {
+  if (lock->holder == NULL) {
     lock->holder = thread_current();
-    //return;
-  //}
-  /*struct thread *holder;
-  int priority_holder;
-  while (lock->holder != NULL) {
+    
+  } else {
+
+    struct thread *holder;
+    int priority_holder;
     holder = lock->holder;
     priority_holder  = holder->priority;
-    if (priority_holder < thread_current()->priority)
-      donar(thread_current()->priority, holder); 
-  }*/
+    
+    if (lock->holder != NULL) {
+      
+      //list_insert_ordered(&lock->holder->locks, &thread_current()->elem, sort_priority, NULL);
+      
+      donar(thread_current()->priority_original, holder);
+      //thread_set_priority(0);
+      
 
+      enum intr_level old_level;
+      old_level = intr_disable ();
+      
+      //blockList[head] = &thread_current()->elem;
+      //head++;
+      thread_block();
+      
+      old_level = intr_enable();
+      intr_set_level (old_level);
+
+      //list_init(&sleep_list, &thread_current()->elem);
+      //list_init (&blocked_list);
+      //list_insert(&sleep_list, &thread_current()->elem);
+      
+      
+      
+    }
+    //thread_set_priority(thread_current()->priority_original);
+    lock->holder = thread_current();
+  }
+  
+  sema_down (&lock->semaphore);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -248,9 +274,24 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+  
 
+  struct thread *holder = lock->holder;
   lock->holder = NULL;
+
+  /*if (!list_empty(&holder->locks)) {
+    
+    struct thread *thred = list_entry(list_pop_front(&holder->locks), struct thread, elem);
+    thread_unblock(thred);
+  }*/
+   
+  
+  if (holder->priority != holder->priority_original) {
+    donar(holder->priority_original, holder);
+  }
+
   sema_up (&lock->semaphore);
+  
 }
 
 /* Returns true if the current thread holds LOCK, false
