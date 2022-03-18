@@ -23,8 +23,8 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
-    struct list_elem element;
-    int value;
+    struct list_elem elem;
+    int priority;
   };
 
 void lock_init (struct lock *);
@@ -45,6 +45,7 @@ void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
 bool sort_sema (const struct list_elem *elem1, const struct list_elem *elem2);
+bool sort_lock (const struct list_elem *elem1, const struct list_elem *elem2); 
 /* Optimization barrier.
 
    The compiler will not reorder operations across an
