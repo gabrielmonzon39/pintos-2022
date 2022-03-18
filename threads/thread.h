@@ -94,13 +94,12 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    struct lock *temp;
     struct list_elem *sleep;
     
     int priority_original;
     int priority_donated;
     struct list locks;
-    struct lock *wait;
-    struct list_elem donation;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -152,13 +151,17 @@ int thread_get_load_avg (void);
 void insert_into_sleep_list(int64_t ticks);
 void remove_from_sleep_list(int64_t ticks);
 
-void donar(int priority, struct thread *holder);
+void donar(struct thread *t1, struct thread *t2);
+void donar_lock(struct lock *t1, struct thread *t2);
+void donar_original(int priority, struct thread *t);
+void donar_1(int priority, struct thread *t);
+void yield(struct thread *t);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
 static struct list sleep_list;
 
-static struct list blocked_list;
-static struct list_elem *blockList[500];
-static int head = 0;  
+//static struct list blocked_list;
+//static struct list_elem *blockList[500];
+//static int head = 0;  
 
 #endif /* threads/thread.h */
 //push 38pts/100pts
