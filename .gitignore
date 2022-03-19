@@ -2,3 +2,5 @@
 pintos-docker/
 *.a
 *.o
+utils/pintos
+utils/Pintos.pm
