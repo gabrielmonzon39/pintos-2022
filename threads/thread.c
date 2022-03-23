@@ -24,8 +24,8 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-static struct list blocked_list;
-static struct list_elem *blockList[500];
+//static struct list blocked_list;
+//static struct list_elem *blockList[500];
 //static int head = 0; 
 
 /* Lista de Thread durmiendo*/
@@ -99,7 +99,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
-  list_init (&blocked_list);
+  //list_init (&blocked_list);
   list_init (&sleep_list);
   list_init (&all_list);
 
@@ -108,7 +108,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   
   // Agregamos esto XD
-  list_init (&initial_thread->locks);
+  //list_init (&initial_thread->locks);
   
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
@@ -302,7 +302,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   //list_push_back (&ready_list, &t->elem);
-  list_insert_ordered (&ready_list, &t->elem, sort_priority, NULL);
+  list_insert_ordered (&ready_list, &t->elem, sort_priority, NULL); //inserta y ordena por prioridad
 
   t->status = THREAD_READY;
 
@@ -364,6 +364,16 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  
+  struct thread *curr = thread_current();
+
+  // release all locks
+  struct list_elem *e;
+  for (e = list_begin (&curr->locks); e != list_end (&curr->locks); e = list_next (e)) {
+    struct lock *lock = list_entry(e, struct lock, elem);
+    lock_release(lock);
+  }
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
@@ -380,14 +390,15 @@ void
 thread_yield (void) 
 {
   struct thread *cur = thread_current ();
-  struct list_elem element = cur->elem;
+  //struct list_elem element = cur->elem;
   enum intr_level old_level;
   
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, sort_priority, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, sort_priority, NULL); //inserta y ordena por prioridad
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -410,15 +421,55 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-void donar (int priority, struct thread *thred) {
-  thred->priority = priority;
-  thred->priority_donated = priority;
+/* hace yield si hay otro thread de mayor prioridad en la lista de espera */
+void yield(struct thread *t) {
+  if (t == thread_current() && !list_empty (&ready_list)) {
+    struct thread *first = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (first != NULL && first->priority > t->priority) thread_yield();
+  }
+}
 
-  /*if (!list_empty (&ready_list)) {
-    struct thread *firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
+/* lo mismo que arriba pero recibe INT PRIORIDAD*/
+void yield_p(int prio) {
+  struct thread *firstInQueue;
+  if (!list_empty(&ready_list)) {
+    firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
     if (firstInQueue == NULL) return;
-    if (firstInQueue->priority > priority) thread_yield();
-  }*/
+    if (firstInQueue->priority > prio) thread_yield();
+  }
+}
+
+/* regresa a su prioridad anterior luego de donar y que el thread haga yield */
+void donar_original(int priority, struct thread *t) {
+  t->priority = priority;
+  yield(t);
+}
+
+/* Se le setea una prioridad especifica a un thread */
+void donar_1 (int priority, struct thread *thred) {
+  
+  thred->priority = priority;
+  
+  if (thred == thread_current() && !list_empty (&ready_list)) {
+    struct thread *first = list_entry(list_begin(&ready_list), struct thread, elem);
+    if (first != NULL && first->priority > priority) {
+      thread_yield();
+    }
+  }
+}
+
+/* thread t1 le da su prioridad a thread t2 */
+void donar (struct thread *t1,  struct thread *t2) { 
+  t2->priority = t1->priority;
+  t2->priority_donated = t1->priority;
+  yield(t1);
+}
+
+/* lock t1 le da su prioridad a thread t2 (lock en espera de otro lock) */
+void donar_lock (struct lock *t1,  struct thread *t2) {
+  t2->priority = t1->priority;
+  t2->priority_donated = t1->priority;
+  yield(t2);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -430,13 +481,7 @@ thread_set_priority (int new_priority)
     thread_current()->priority = new_priority;
   }
   thread_current()->priority_original = new_priority;
-
-  struct thread *firstInQueue;
-  if (!list_empty(&ready_list)) {
-    firstInQueue = list_entry(list_begin(&ready_list), struct thread, elem);
-    if (firstInQueue == NULL) return;
-    if (firstInQueue->priority > new_priority) thread_yield();
-  }
+  yield_p(new_priority);
 }
 
 /* Returns the current thread's priority. */
@@ -563,7 +608,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  //**********************************************************  
   t->priority_original = priority; // priority change test ya
+  t->temp = NULL;         // Esta y la de abajo es para inicializacion
+  list_init (&t->locks);          // actualmente ese era el problema del priority-donate-one 
+  //**********************************************************
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
