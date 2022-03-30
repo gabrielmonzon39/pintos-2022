@@ -5,11 +5,15 @@
 #include "threads/thread.h"
 
 #define maxPosibleArgs 3
-#define _halt 0
-#define _exit 1
 
-void halt(void);
-void exit(int num);
+#define ERROR -1
+#define NOT_LOADED 0
+#define LOADED 1
+#define LOAD_FAIL 2
+#define CLOSE_ALL_FD -1
+#define USER_VADDR_BOTTOM ((void *) 0x08048000)
+
+
 /*
 int
 getpage_ptr(const void *vaddr)
@@ -53,6 +57,13 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+/* 
+  A la hora de hacer los ifs colocar SYS_"Nombre de la syscall"
+  Esto se puede ver en syscall-nr.h.
+  Recordar que las definiciones de las definiciones de las syscalls
+  se encuentran en syscall.h.
+*/
+
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
@@ -60,8 +71,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   //int esp = getpage_ptr((const void *) f->esp);
 
   exit(57);
-  //if (esp == _halt) halt();
-  //if (esp == _exit) {/*get_args(f, &arg[0], 1);*/ exit(arg[0]);}
+  //if (esp == SYS_HALT) halt();
+  //if (esp == SYS_EXIT) {/*get_args(f, &arg[0], 1);*/ exit(arg[0]);}
   /*printf ("system call!\n");
   thread_exit ();*/
 }
@@ -73,4 +84,48 @@ void halt(void) {
 void exit(int num) {
   printf("%s: exit(%d)\n", thread_current()->name, num);
   thread_exit();
+}
+
+pid_t exec (const char *file) {
+
+}
+
+int wait (pid_t) {
+
+}
+
+bool create (const char *file, unsigned initial_size) {
+
+}
+
+bool remove (const char *file) {
+
+}
+
+int open (const char *file) {
+
+}
+
+int filesize (int fd) {
+
+}
+
+int read (int fd, void *buffer, unsigned length) {
+
+}
+
+int write (int fd, const void *buffer, unsigned length) {
+
+}
+
+void seek (int fd, unsigned position) {
+
+}
+
+unsigned tell (int fd) {
+
+}
+
+void close (int fd) {
+
 }
