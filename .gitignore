@@ -4,3 +4,4 @@ pintos-docker/
 *.o
 utils/pintos
 utils/Pintos.pm
+launch.json

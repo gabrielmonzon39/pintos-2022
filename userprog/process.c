@@ -31,6 +31,9 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
+  char *name;
+  char *save_ptr;
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -38,8 +41,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Get Filename */
+
+  name = strtok_r (fn_copy, " ", &save_ptr);
+  //strlcpy(args, save_ptr, strlen(file_name) - strlen(name))
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -214,12 +222,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+  char *save_ptr;
+  char *token;
+  uint8_t argc;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+
+  for(token = strtok_r((char )file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+  {
+    argv[argc] = token;
+    argc++; 
+  }
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -302,7 +319,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, save_ptr, file_name))
     goto done;
 
   /* Start address. */
@@ -427,7 +444,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char **ptr, const char *file_name) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -436,9 +453,16 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success){
         *esp = PHYS_BASE;
-      else
+        args_address[kpage];
+        reverse_arg = reverse_args(args);
+        for (arg in args){
+          *esp -= strlen(arg) + 1; 
+          memcpy(*esp, arg, strlen(arg) + 1);
+          args_adress[# of arg] = *esp
+        }
+      }else
         palloc_free_page (kpage);
     }
   return success;
