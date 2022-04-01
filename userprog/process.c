@@ -41,9 +41,9 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* Get Filename */
+  
 
-  name = strtok_r (fn_copy, " ", &save_ptr);
+  name = strtok_r (fn_copy, " ", &save_ptr);// tokenizamos el archivo
   //strlcpy(args, save_ptr, strlen(file_name) - strlen(name))
 
   /* Create a new thread to execute FILE_NAME. */
@@ -224,7 +224,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
   char *save_ptr;
   char *token;
-  uint8_t argc;
+  int argc;
+  char *argv[30];// The file system limits file names to 14 characters
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -234,7 +235,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   for(token = strtok_r((char )file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
   {
-    argv[argc] = token;
+    argv[argc] = token;//agregamos los tokens al array
     argc++; 
   }
 
@@ -319,7 +320,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, save_ptr, file_name))
+  if (!setup_stack (esp, argc, argv))// mandamos la lista de argumentos y el total de args
     goto done;
 
   /* Start address. */
@@ -444,10 +445,21 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, char **ptr, const char *file_name) 
+setup_stack (void **esp, int argc ,  char *file_name) 
 {
   uint8_t *kpage;
   bool success = false;
+  char *address_r[argc];
+  char *aux;
+
+  for(int i = 0; i < argc/2; i++){
+    aux=file_name[i];
+    file_name[i]=file_name[argc - i -1];
+    file_name[arc - i -1]= aux;
+  }
+
+
+
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
@@ -455,18 +467,34 @@ setup_stack (void **esp, char **ptr, const char *file_name)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success){
         *esp = PHYS_BASE;
-        args_address[kpage];
-        reverse_arg = reverse_args(args);
-        for (arg in args){
-          *esp -= strlen(arg) + 1; 
-          memcpy(*esp, arg, strlen(arg) + 1);
-          args_adress[# of arg] = *esp
-        }
+
       }else
         palloc_free_page (kpage);
     }
+
+/*Agregado*/
+  
+  for (int i = 0; i <argc;i++)
+    *esp -= strlen(aux[i]) + 1; 
+    memcpy(*esp, aux[i], strlen(aux[i])  + 1);
+    file_name[i] = *esp
+/*-------------------------------------------------------*/
+    
+
+
+
+
+    
+
   return success;
+
+
 }
+
+
+
+
+
 
 /* Adds a mapping from user virtual address UPAGE to kernel
    virtual address KPAGE to the page table.
