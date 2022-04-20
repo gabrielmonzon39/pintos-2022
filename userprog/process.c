@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+struct waiting_to_load_C * get_waiting_to_load(tid_t,struct thread *);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -47,9 +48,23 @@ process_execute (const char *file_name)
   //strlcpy(args, save_ptr, strlen(file_name) - strlen(name))
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);// Reenviar el primer token como nombre del nuevo proceso
+  if (tid == TID_ERROR){
+    palloc_free_page (fn_copy); // liberamos pagina si este falla y retornamos el error
+    return tid;
+
+  }
+
+   sema_down (&thread_current()->l_sem)// espera a cargar el exe
+
+  if(thread_current()->load_succes==false){
+    struct waiting_to_load_C * waiting_to_load_C = get_waiting_to_load(tid,thread_current());
+    if(waiting_to_load_C!= NULL){// revisamos que si este alguien en esepara para cargar
+      list_remove(&waiting_to_load_C->elem)
+      free(waiting_to_load_C);
+    }
+    return TID_ERROR;
+  }
   return tid;
 }
 
@@ -71,15 +86,24 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success){
+    thread_current()->salir = -1;//no se logro cargar 
+    thread_current()->root->load_succes = false;// no se logro cargar
+    sema_up(&thread_current()->root->l_sem);//despertamos al thread prncipal(padre) y salimos 
     thread_exit ();
 
+  }
+  
+    
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  thread_current()->root->load_succes = true;
+  sema_up(&thread_current()->root->l_sem);
+  hex_dump(if_.esp, if_.esp,PHYS_BASE- if_.esp, true); //hacemos print del memory dump
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -203,7 +227,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp,int argc,char *argv);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -222,6 +246,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+  char *file_name = palloc_get_page (0);
+  char *file_name2 = palloc_get_page (0);
+  strlcpy (file_name, file_name_, PGSIZE);//strlcpy es una verdadera función de copia de longitud limitada creada para trabajar con cadenas
+  strlcpy (file_name2, file_name_, PGSIZE);
+
   char *save_ptr;
   char *token;
   int argc;
@@ -445,19 +475,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, int argc ,  char *file_name) 
+setup_stack (void **esp, int argc , char *file_name) 
 {
   uint8_t *kpage;
   bool success = false;
   char *address_r[argc];
   char *aux;
-
-  for(int i = 0; i < argc/2; i++){
-    aux=file_name[i];
-    file_name[i]=file_name[argc - i -1];
-    file_name[arc - i -1]= aux;
-  }
-
 
 
 
@@ -472,6 +495,14 @@ setup_stack (void **esp, int argc ,  char *file_name)
         palloc_free_page (kpage);
     }
 
+
+// Revertimos el arreglo (split)
+  for(int i = 0; i < argc/2; i++){
+    aux=file_name[i];
+    file_name[i]=file_name[argc - i -1];
+    file_name[arc - i -1]= aux;
+  }
+
 /*Agregado*/
   
   for (int i = 0; i <argc;i++)
@@ -479,16 +510,19 @@ setup_stack (void **esp, int argc ,  char *file_name)
     memcpy(*esp, aux[i], strlen(aux[i])  + 1);
     file_name[i] = *esp
 /*-------------------------------------------------------*/
-    
-
-
-
-
-    
-
+  
   return success;
+}
 
-
+struct waiting_to_load * get_waiting_to_load(tid_t id,struct thread * actual ){
+  struct list_elem * elment;
+  for (elment = list_begin(&actual->waiting_to_load);// obtenemos el primeir elemento de la lista
+  elment != list_end(&actual->waiting_to_load);// no es el unico en la lista
+  elment=list_next(elment));// i++ 
+  {
+    struct waiting_to_load_C * waiting_to_load_C= list_entry(element,struct waiting_to_load, elment); //obtenemos la estrucutara de los elementos en la waiting to load list
+    if()
+  }
 }
 
 

@@ -8,4 +8,12 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
+struct waiting_to_load_C {
+    tid_t id;
+    int value;
+    int state;
+    struct list_elem elem;
+}
+
+
 #endif /* userprog/process.h */

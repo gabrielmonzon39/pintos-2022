@@ -159,6 +159,13 @@ void donar(struct thread *t1, struct thread *t2);
 void donar_lock(struct lock *t1, struct thread *t2);
 void donar_original(int priority, struct thread *t);
 void donar_1(int priority, struct thread *t);
+// defincion de funciones para cargar 
+bool load_succes;
+struct semaphore l_sem;
+int salir;
+int files_c;
+struct thread * root;
+struct list waiting_to_load;
 
 void yield(struct thread *t);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
