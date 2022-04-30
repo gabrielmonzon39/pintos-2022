@@ -12,8 +12,27 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+////////////////////////////     AGREGADO      ////////////////////////////
+////////////////////////////   DEFINICIONES    ////////////////////////////
 static void check_num(int num, struct intr_frame *f);
 int not_valid(int num); 
+
+void do_halt(int num, struct intr_frame *f);
+void do_exit(int num, struct intr_frame *f);
+void do_execute(int num, struct intr_frame *f);
+void do_wait(int num, struct intr_frame *f);
+void do_create(int num, struct intr_frame *f);
+void do_remove(int num, struct intr_frame *f);
+void do_open(int num, struct intr_frame *f);
+void do_filesize(int num, struct intr_frame *f);
+void do_read(int num, struct intr_frame *f);
+void do_write(int num, struct intr_frame *f);
+void do_seek(int num, struct intr_frame *f);
+void do_tell(int num, struct intr_frame *f);
+void do_close(int num, struct intr_frame *f);
+void do_not_valid(int num, struct intr_frame *f);
+
+void do_exit2(int num);
 
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
