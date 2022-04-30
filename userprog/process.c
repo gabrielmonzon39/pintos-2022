@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include <stdarg.h>
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -55,12 +56,12 @@ process_execute (const char *file_name)
 
   }
 
-   sema_down (&thread_current()->l_sem)// espera a cargar el exe
+   sema_down (&thread_current()->l_sem);// espera a cargar el exe
 
   if(thread_current()->load_succes==false){
     struct waiting_to_load_C * waiting_to_load_C = get_waiting_to_load(tid,thread_current());
     if(waiting_to_load_C!= NULL){// revisamos que si este alguien en esepara para cargar
-      list_remove(&waiting_to_load_C->elem)
+      list_remove(&waiting_to_load_C->elem);
       free(waiting_to_load_C);
     }
     return TID_ERROR;
@@ -247,10 +248,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  char *file_name = palloc_get_page (0);
+ /* char *file_name = palloc_get_page (0);
   char *file_name2 = palloc_get_page (0);
   strlcpy (file_name, file_name_, PGSIZE);//strlcpy es una verdadera función de copia de longitud limitada creada para trabajar con cadenas
-  strlcpy (file_name2, file_name_, PGSIZE);
+  strlcpy (file_name2, file_name_, PGSIZE);*/
 
   char *save_ptr;
   char *token;
@@ -500,30 +501,34 @@ setup_stack (void **esp, int argc , char *file_name)
   for(int i = 0; i < argc/2; i++){
     aux=file_name[i];
     file_name[i]=file_name[argc - i -1];
-    file_name[arc - i -1]= aux;
+    file_name[argc - i -1]= aux;
   }
 
 /*Agregado*/
   
-  for (int i = 0; i <argc;i++)
-    *esp -= strlen(aux[i]) + 1; 
-    memcpy(*esp, aux[i], strlen(aux[i])  + 1);
-    file_name[i] = *esp
+  for (int i = 0; i <argc;i++){ 
+      *esp -= strlen(aux[i]) + 1; // bajamos el stack
+      memcpy(*esp, aux[i], strlen(aux[i])  + 1);// copiamos los caracteres hacia al stack(dest)
+    //file_name[i] = *esp
+  }
 /*-------------------------------------------------------*/
   
   return success;
 }
 
-struct waiting_to_load * get_waiting_to_load(tid_t id,struct thread * actual ){
+/*struct waiting_to_load * get_waiting_to_load(tid_t id,struct thread * actual ){
   struct list_elem * elment;
   for (elment = list_begin(&actual->waiting_to_load);// obtenemos el primeir elemento de la lista
   elment != list_end(&actual->waiting_to_load);// no es el unico en la lista
   elment=list_next(elment));// i++ 
   {
-    struct waiting_to_load_C * waiting_to_load_C= list_entry(element,struct waiting_to_load, elment); //obtenemos la estrucutara de los elementos en la waiting to load list
-    if()
+    struct waiting_to_load_C * waiting_to_load_C= list_entry(elment,struct waiting_to_load, elment); //obtenemos la estrucutara de los elementos en la waiting to load list
+    if(waiting_to_load_C == id){
+      return waiting_to_load_C;
+    }
   }
-}
+  return NULL;
+}*/
 
 
 

@@ -264,7 +264,7 @@ sub find_disks {
 
     # Try to find file system and swap disks, if we don't already have
     # partitions.
-    if (!exists $parts{FILESYS}) {s
+    if (!exists $parts{FILESYS}) {
 	my $name = find_file ('filesys.dsk');
 	set_disk ($name) if defined $name;
     }
