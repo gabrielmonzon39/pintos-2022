@@ -88,7 +88,52 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  //----------------------------------
+  struct thread *thr = thread_current();
+  struct list *children_process= &(thr->children_process);
+  struct process_control_block *c_pcb=NULL;
+  struct list_elem *elm = NULL;
+
+  if (!list_empty(children_process)) {// verificar que todavia hay procesos en espera
+    for (pos = list_front(children_process); pos != list_end(children_process); it = list_next(it)) {
+      struct process_control_block *pcb = list_entry(
+          pos, struct process_control_block, elem);  // entonces si es diferente al ultimo de la espera, se mete al process control block
+          
+
+      if(pcb->pid == child_tid) { // verificamos que el pid concida para verificar que sea el proceso correcto
+        child_pcb = pcb;
+        break;
+      }
+    }
+  }
+
+  if(c_pcb== NULL){
+    //If process is invalid
+    return -1;
+  }
+  if(c_pcb->waiting){
+    //if process_wait() has already been successfully called
+    return -1
+  }
+  else{
+    c_pcb->waiting=true;
+  }
+
+  if(!c_pcb->exited){
+    sema_down(&(c_pcb->sema_wait));// ya que todavia no ha terminado no subimos el semaforo ya que esta ocupado
+  }
+  ASSERT(c_pcb->exited==true); //verificamos que el proceso child ya termino
+
+//Una vez terminado debemos verificar que salga de la lista
+ASSERT(pos != NULL);
+list_remove(pos);
+
+int rcode= c_pcb->exitcode;
+//liberamos el proceso
+palloc_free_page(c_pcb);
+
+  //----------------------------------
+  return rcode;
 }
 
 /* Free the current process's resources. */
