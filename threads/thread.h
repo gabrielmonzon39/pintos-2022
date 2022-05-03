@@ -166,5 +166,7 @@ void yield(struct thread *t);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
 static struct list sleep_list;
 
+struct file *exefile;  
+
 #endif /* threads/thread.h */
 //push 38pts/100pts
