@@ -35,28 +35,29 @@ static void push_arguments (const char *[], int cnt, void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 pid_t
-process_execute (const char *cmdline)
+process_execute (const char *file_name)
 {
-  char *cmdline_copy = NULL, *file_name = NULL;
+  char *fn_copy = NULL;
+  char *file_name_2 = NULL;
   char *save_ptr = NULL;
   struct process_control_block *pcb = NULL;
   tid_t tid;
 
   /* Make a copy of CMD_LINE.
      Otherwise there's a race between the caller and load(). */
-  cmdline_copy = palloc_get_page (0);
-  if (cmdline_copy == NULL) {
+  fn_copy = palloc_get_page (0);
+  if (fn_copy == NULL) {
     goto execute_failed;
   }
-  strlcpy (cmdline_copy, cmdline, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE);
 
-  // Extract file_name from cmdline. Should make a copy.
-  file_name = palloc_get_page (0);
-  if (file_name == NULL) {
+  // Extraer el nombre del archivo de file_name haciendo una copia
+  file_name_2 = palloc_get_page (0);
+  if (file_name_2 == NULL) {
     goto execute_failed;
   }
-  strlcpy (file_name, cmdline, PGSIZE);
-  file_name = strtok_r(file_name, " ", &save_ptr);
+  strlcpy (file_name_2, file_name, PGSIZE);
+  file_name_2 = strtok_r(fn_copy, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
 
@@ -72,7 +73,7 @@ process_execute (const char *cmdline)
   // alongwith (determined) 'pid' into 'child_list'), using context switching.
   pcb->pid = PID_INITIALIZING;
 
-  pcb->cmdline = cmdline_copy;
+  pcb->cmdline = fn_copy;
   pcb->waiting = false;
   pcb->exited = false;
   pcb->orphan = false;
@@ -82,7 +83,7 @@ process_execute (const char *cmdline)
   sema_init(&pcb->sema_wait, 0);
 
   // create thread!
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, pcb);
+  tid = thread_create (file_name_2, PRI_DEFAULT, start_process, pcb);
 
   if (tid == TID_ERROR) {
     goto execute_failed;
@@ -90,8 +91,8 @@ process_execute (const char *cmdline)
 
   // wait until initialization inside start_process() is complete.
   sema_down(&pcb->sema_initialization);
-  if(cmdline_copy) {
-    palloc_free_page (cmdline_copy);
+  if(fn_copy) {
+    palloc_free_page (fn_copy);
   }
 
   // process successfully created, maintain child process list
@@ -99,13 +100,13 @@ process_execute (const char *cmdline)
     list_push_back (&(thread_current()->child_list), &(pcb->elem));
   }
 
-  palloc_free_page (file_name);
+  palloc_free_page (file_name_2);
   return pcb->pid;
 
 execute_failed:
   // release allocated memory and return
-  if(cmdline_copy) palloc_free_page (cmdline_copy);
-  if(file_name) palloc_free_page (file_name);
+  if(fn_copy) palloc_free_page (fn_copy);
+  if(file_name_2) palloc_free_page (file_name_2);
   if(pcb) palloc_free_page (pcb);
 
   return PID_ERROR;
@@ -123,20 +124,20 @@ start_process (void *pcb_)
   bool success = false;
 
   // cmdline handling
-  const char **cmdline_tokens = (const char**) palloc_get_page(0);
+  const char **argv = (const char**) palloc_get_page(0);
 
-  if (cmdline_tokens == NULL) {
+  if (argv == NULL) {
     printf("[Error] Kernel Error: Not enough memory\n");
     goto finish_step; // pid being -1, release lock, clean resources
   }
 
   char* token;
   char* save_ptr;
-  int cnt = 0;
+  int argc = 0;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr))
   {
-    cmdline_tokens[cnt++] = token;
+    argv[argc++] = token;
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -147,9 +148,9 @@ start_process (void *pcb_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   if (success) {
-    push_arguments (cmdline_tokens, cnt, &if_.esp);
+    push_arguments (argv, argc, &if_.esp);
   }
-  palloc_free_page (cmdline_tokens);
+  palloc_free_page (argv);
 
 
 finish_step:
@@ -189,59 +190,7 @@ finish_step:
 int
 process_wait (tid_t child_tid)
 {
-  struct thread *t = thread_current ();
-  struct list *child_list = &(t->child_list);
-
-  // lookup the process with tid equals 'child_tid' from 'child_list'
-  struct process_control_block *child_pcb = NULL;
-  struct list_elem *it = NULL;
-
-  if (!list_empty(child_list)) {
-    for (it = list_front(child_list); it != list_end(child_list); it = list_next(it)) {
-      struct process_control_block *pcb = list_entry(
-          it, struct process_control_block, elem);
-
-      if(pcb->pid == child_tid) { // OK, the direct child found
-        child_pcb = pcb;
-        break;
-      }
-    }
-  }
-
-  // if child process is not found, return -1 immediately
-  if (child_pcb == NULL) {
-    _DEBUG_PRINTF("[DEBUG] wait(): child not found, pid = %d\n", child_tid);
-    return -1;
-  }
-
-  if (child_pcb->waiting) {
-    // already waiting (the parent already called wait on child's pid)
-    _DEBUG_PRINTF("[DEBUG] wait(): child found, pid = %d, but it is already waiting\n", child_tid);
-    return -1; // a process may wait for any fixed child at most once
-  }
-  else {
-    child_pcb->waiting = true;
-  }
-
-  // wait(block) until child terminates
-  // see process_exit() for signaling this semaphore
-  if (! child_pcb->exited) {
-    sema_down(& (child_pcb->sema_wait));
-  }
-  ASSERT (child_pcb->exited == true);
-
-  // remove from child_list
-  ASSERT (it != NULL);
-  list_remove (it);
-
-  // return the exit code of the child process
-  int retcode = child_pcb->exitcode;
-
-  // Now the pcb object of the child process can be finally freed.
-  // (in this context, the child process is guaranteed to have been exited)
-  palloc_free_page(child_pcb);
-
-  return retcode;
+  return -1;
 }
 
 /* Free the current process's resources. */
