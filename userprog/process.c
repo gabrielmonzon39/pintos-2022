@@ -37,14 +37,15 @@ static void push_arguments (const char *[], int cnt, void **esp);
 pid_t
 process_execute (const char *file_name)
 {
-  char *fn_copy = NULL;
+  char *fn_copy = NULL;     // fn_copy y file_name_2 son copias exactas de file_name
   char *file_name_2 = NULL;
   char *save_ptr = NULL;
-  struct process_control_block *pcb = NULL;
+  struct process_control_block *pcb = NULL;  // para guardar los datos del proceso actual
   tid_t tid;
 
-  /* Make a copy of CMD_LINE.
-     Otherwise there's a race between the caller and load(). */
+  /* Se realiza una copia de la linea de comandos (file_name)
+     de lo contrario se genera una condicion de carrera entre el call y load()
+     caller como halt entre otros */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL) {
     goto execute_failed;
@@ -57,7 +58,7 @@ process_execute (const char *file_name)
     goto execute_failed;
   }
   strlcpy (file_name_2, file_name, PGSIZE);
-  file_name_2 = strtok_r(fn_copy, " ", &save_ptr);
+  file_name_2 = strtok_r(fn_copy, " ", &save_ptr); // extraemos unicamente el nombre del archivo
 
   /* Create a new thread to execute FILE_NAME. */
 
@@ -82,20 +83,20 @@ process_execute (const char *file_name)
   sema_init(&pcb->sema_initialization, 0);
   sema_init(&pcb->sema_wait, 0);
 
-  // create thread!
+  // creamos el tread con el nombre del archivo que tokenizamos
   tid = thread_create (file_name_2, PRI_DEFAULT, start_process, pcb);
 
   if (tid == TID_ERROR) {
     goto execute_failed;
   }
 
-  // wait until initialization inside start_process() is complete.
+  // Espera hasta que la inicializacion en start_process termine
   sema_down(&pcb->sema_initialization);
   if(fn_copy) {
     palloc_free_page (fn_copy);
   }
 
-  // process successfully created, maintain child process list
+  // Si el proceso es creado exitosamente, el children se mantiene en la lista
   if(pcb->pid >= 0) {
     list_push_back (&(thread_current()->child_list), &(pcb->elem));
   }
@@ -120,10 +121,10 @@ start_process (void *pcb_)
   struct thread *t = thread_current();
   struct process_control_block *pcb = pcb_;
 
-  char *file_name = (char*) pcb->cmdline;
+  char *file_name = (char*) pcb->cmdline; // linea de comandos a tokenizar
   bool success = false;
 
-  // cmdline handling
+  // Arreglo para guardar los argumentos a tokenizar
   const char **argv = (const char**) palloc_get_page(0);
 
   if (argv == NULL) {
@@ -155,13 +156,13 @@ start_process (void *pcb_)
 
 finish_step:
 
-  /* Assign PCB */
-  // we maintain an one-to-one mapping between pid and tid, with identity function.
-  // pid is determined, so interact with process_execute() for maintaining child_list
+  /* Asignamos el process control block para que de esta forma logramos mapear el pid y tid,
+    en base al pid se logra verificar el proceso.
+  */
   pcb->pid = success ? (pid_t)(t->tid) : PID_ERROR;
   t->pcb = pcb;
 
-  // wake up sleeping in process_execute()
+  // Habilita el semaforo par poder despertar a otro proceso.
   sema_up(&pcb->sema_initialization);
 
   /* If load failed, quit. */
@@ -581,25 +582,29 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static void
 push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 {
-  ASSERT(argc >= 0);
+  /* cmdline_tokens es la lista de argumentos 
+     agrc es la cantidad de argumentos enviados 
+     esp es nuestro stack
+  */
+  ASSERT(argc >= 0); //Verificamos si existen argumentos.
 
   int i, len = 0;
   void* argv_addr[argc];
-  for (i = 0; i < argc; i++) {
-    len = strlen(cmdline_tokens[i]) + 1;
-    *esp -= len;
+  for (i = 0; i < argc; i++) {                   //recorremos la lista de argumentos 
+    len = strlen(cmdline_tokens[i]) + 1;         // bajamos el stack por el tamaño del string y el +1 por el valor nullo al final de la cadena
+    *esp -= len;                                 // se baja el para que cada argumento quede en una posicion unica de memoria
     memcpy(*esp, cmdline_tokens[i], len);
-    argv_addr[i] = *esp;
+    argv_addr[i] = *esp;                         //arreglo que contiene la direccion de cada argumento.
   }
 
-  // word align
+  // Alineacion de las palabras y/o argumentos para alinear el stack con la memoria
   *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
 
-  // last null
+  // Escribe la direccion del argv
   *esp -= 4;
   *((uint32_t*) *esp) = 0;
 
-  // setting **esp with argvs
+  // Escribir la direccion de cada argumento del proceso
   for (i = argc - 1; i >= 0; i--) {
     *esp -= 4;
     *((void**) *esp) = argv_addr[i];
@@ -609,11 +614,11 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   *esp -= 4;
   *((void**) *esp) = (*esp + 4);
 
-  // setting argc
+  // Escribir la cantidad de argc (argumentos mas nombre)
   *esp -= 4;
   *((int*) *esp) = argc;
 
-  // setting ret addr
+  // La direccion de retorno debe ser 0
   *esp -= 4;
   *((int*) *esp) = 0;
 
