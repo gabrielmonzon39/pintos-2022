@@ -107,6 +107,16 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    struct process_control_block *pcb;  /* Process Control Block */
+    struct list  children_process;             /* List of children processes of this thread,
+                                          each elem is defined by pcb#elem */
+
+    struct list file_descriptors;       /* List of file_descriptors the thread contains */
+
+    struct file *exefile;        /* The executable file of associated process. */
+
+    uint8_t *current_esp;       
 #endif
 
     /* Owned by thread.c. */
@@ -163,6 +173,8 @@ void donar_1(int priority, struct thread *t);
 void yield(struct thread *t);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
 static struct list sleep_list;
+
+struct file *exefile;  
 
 #endif /* threads/thread.h */
 //push 38pts/100pts
