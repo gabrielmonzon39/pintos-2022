@@ -58,6 +58,14 @@ process_execute (const char *cmdline)
   strlcpy (file_name, cmdline, PGSIZE);
   file_name = strtok_r(file_name, " ", &save_ptr);
 
+  // Extraer el nombre del archivo de file_name haciendo una copia
+  file_name_2 = palloc_get_page (0);
+  if (file_name_2 == NULL) {
+    goto execute_failed;
+  }
+  strlcpy (file_name_2, file_name, PGSIZE);
+  file_name_2 = strtok_r(fn_copy, " ", &save_ptr); // extraemos unicamente el nombre del archivo
+
   /* Create a new thread to execute FILE_NAME. */
 
   // Create a PCB, along with file_name, and pass it into thread_create
@@ -83,23 +91,6 @@ process_execute (const char *cmdline)
 
   // create thread!
   tid = thread_create (file_name, PRI_DEFAULT, start_process, pcb);
-
-  if (tid == TID_ERROR) {
-    goto execute_failed;
-  }
-
-  // wait until initialization inside start_process() is complete.
-  sema_down(&pcb->sema_initialization);
-  if(cmdline_copy) {
-    palloc_free_page (cmdline_copy);
-  }
-
-  // process successfully created, maintain child process list
-  if(pcb->pid >= 0) {
-    list_push_back (&(thread_current()->child_list), &(pcb->elem));
-  }
-
-  palloc_free_page (file_name);
   return pcb->pid;
 
 execute_failed:
@@ -119,24 +110,27 @@ start_process (void *pcb_)
   struct thread *t = thread_current();
   struct process_control_block *pcb = pcb_;
 
+<<<<<<< HEAD
   char *file_name = (char*) pcb->cmdline;
-  bool success = false;
+  char *file_name = (char*) pcb->cmdline; // linea de comandos a tokenizar
 
-  // cmdline handling
-  const char **cmdline_tokens = (const char**) palloc_get_page(0);
-
-  if (cmdline_tokens == NULL) {
-    printf("[Error] Kernel Error: Not enough memory\n");
-    goto finish_step; // pid being -1, release lock, clean resources
   }
 
   char* token;
   char* save_ptr;
+<<<<<<< HEAD
   int cnt = 0;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr))
   {
     cmdline_tokens[cnt++] = token;
+=======
+  int argc = 0;
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr))
+  {
+    argv[argc++] = token;
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -147,13 +141,20 @@ start_process (void *pcb_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   if (success) {
+<<<<<<< HEAD
     push_arguments (cmdline_tokens, cnt, &if_.esp);
   }
   palloc_free_page (cmdline_tokens);
+=======
+    push_arguments (argv, argc, &if_.esp);
+  }
+  palloc_free_page (argv);
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
 
 
 finish_step:
 
+<<<<<<< HEAD
   /* Assign PCB */
   // we maintain an one-to-one mapping between pid and tid, with identity function.
   // pid is determined, so interact with process_execute() for maintaining child_list
@@ -161,11 +162,24 @@ finish_step:
   t->pcb = pcb;
 
   // wake up sleeping in process_execute()
+=======
+  /* Asignamos el process control block para que de esta forma logramos mapear el pid y tid,
+    en base al pid se logra verificar el proceso.
+  */
+  pcb->pid = success ? (pid_t)(t->tid) : PID_ERROR;
+  t->pcb = pcb;
+
+  // Habilita el semaforo par poder despertar a otro proceso.
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   sema_up(&pcb->sema_initialization);
 
   /* If load failed, quit. */
   if (!success)
+<<<<<<< HEAD
     do_exit2 (-1);
+=======
+    do_exit (-1);
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -189,6 +203,7 @@ finish_step:
 int
 process_wait (tid_t child_tid)
 {
+<<<<<<< HEAD
   struct thread *t = thread_current ();
   struct list *child_list = &(t->child_list);
 
@@ -203,11 +218,28 @@ process_wait (tid_t child_tid)
 
       if(pcb->pid == child_tid) { // OK, the direct child found
         child_pcb = pcb;
+=======
+  //----------------------------------
+  struct thread *thr = thread_current();
+  struct list *children_process= &(thr->children_process);
+  struct process_control_block *c_pcb=NULL;
+  struct list_elem *pos = NULL;
+
+  if (!list_empty(children_process)) {// verificar que todavia hay procesos en espera
+    for (pos = list_front(children_process); pos != list_end(children_process); pos = list_next(pos)) {
+      struct process_control_block *pcb = list_entry(
+          pos, struct process_control_block, elem);  // entonces si es diferente al ultimo de la espera, se mete al process control block
+          
+
+      if(pcb->pid == child_tid) { // verificamos que el pid concida para verificar que sea el proceso correcto
+        c_pcb = pcb;
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
         break;
       }
     }
   }
 
+<<<<<<< HEAD
   // if child process is not found, return -1 immediately
   if (child_pcb == NULL) {
     _DEBUG_PRINTF("[DEBUG] wait(): child not found, pid = %d\n", child_tid);
@@ -242,6 +274,35 @@ process_wait (tid_t child_tid)
   palloc_free_page(child_pcb);
 
   return retcode;
+=======
+  if(c_pcb== NULL){
+    //If process is invalid
+    return -1;
+  }
+  if(c_pcb->waiting){
+    //if process_wait() has already been successfully called
+    return -1;
+  }
+  else{
+    c_pcb->waiting=true;
+  }
+
+  if(!c_pcb->exited){
+    sema_down(&(c_pcb->sema_wait));// ya que todavia no ha terminado no subimos el semaforo ya que esta ocupado
+  }
+  ASSERT(c_pcb->exited==true); //verificamos que el proceso child ya termino
+
+//Una vez terminado debemos verificar que salga de la lista
+ASSERT(pos != NULL);
+list_remove(pos);
+
+int rcode= c_pcb->exitcode;
+//liberamos el proceso
+palloc_free_page(c_pcb);
+
+  //----------------------------------
+  return rcode;
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
 }
 
 /* Free the current process's resources. */
@@ -262,7 +323,11 @@ process_exit (void)
   }
 
   // 2. clean up pcb object of all children processes
+<<<<<<< HEAD
   struct list *child_list = &cur->child_list;
+=======
+  struct list *child_list = &cur->children_process;
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   while (!list_empty(child_list)) {
     struct list_elem *e = list_pop_front (child_list);
     struct process_control_block *pcb;
@@ -278,9 +343,15 @@ process_exit (void)
   }
 
   /* Release file for the executable */
+<<<<<<< HEAD
   if(cur->executing_file) {
     file_allow_write(cur->executing_file);
     file_close(cur->executing_file);
+=======
+  if(cur->exefile) {
+    file_allow_write(cur->exefile);
+    file_close(cur->exefile);
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   }
 
   // Unblock the waiting parent process, if any, from wait().
@@ -326,7 +397,6 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -503,16 +573,25 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+<<<<<<< HEAD
   /* Deny writes to executables. */
   file_deny_write (file);
   thread_current()->executing_file = file;
+=======
+  file_deny_write(file);
+  thread_current()->exefile=file;
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
 
   success = true;
 
  done:
   /* We arrive here whether the load is successful or not. */
+<<<<<<< HEAD
 
   // do not close file here, postpone until it terminates
+=======
+  //file_close (file); revisar cuando cerrar
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   return success;
 }
 
@@ -632,6 +711,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static void
 push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 {
+<<<<<<< HEAD
   ASSERT(argc >= 0);
 
   int i, len = 0;
@@ -651,6 +731,31 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   *((uint32_t*) *esp) = 0;
 
   // setting **esp with argvs
+=======
+  /* cmdline_tokens es la lista de argumentos 
+     agrc es la cantidad de argumentos enviados 
+     esp es nuestro stack
+  */
+  ASSERT(argc >= 0); //Verificamos si existen argumentos.
+
+  int i, len = 0;
+  void* argv_addr[argc];
+  for (i = 0; i < argc; i++) {                   //recorremos la lista de argumentos 
+    len = strlen(cmdline_tokens[i]) + 1;         // bajamos el stack por el tamaño del string y el +1 por el valor nullo al final de la cadena
+    *esp -= len;                                 // se baja el para que cada argumento quede en una posicion unica de memoria
+    memcpy(*esp, cmdline_tokens[i], len);
+    argv_addr[i] = *esp;                         //arreglo que contiene la direccion de cada argumento.
+  }
+
+  // Alineacion de las palabras y/o argumentos para alinear el stack con la memoria
+  *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
+
+  // Escribe la direccion del argv
+  *esp -= 4;
+  *((uint32_t*) *esp) = 0;
+
+  // Escribir la direccion de cada argumento del proceso
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   for (i = argc - 1; i >= 0; i--) {
     *esp -= 4;
     *((void**) *esp) = argv_addr[i];
@@ -660,11 +765,19 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   *esp -= 4;
   *((void**) *esp) = (*esp + 4);
 
+<<<<<<< HEAD
   // setting argc
   *esp -= 4;
   *((int*) *esp) = argc;
 
   // setting ret addr
+=======
+  // Escribir la cantidad de argc (argumentos mas nombre)
+  *esp -= 4;
+  *((int*) *esp) = argc;
+
+  // La direccion de retorno debe ser 0
+>>>>>>> a24f7eb888fddb040894685026ff8cf5b6a844fb
   *esp -= 4;
   *((int*) *esp) = 0;
 
