@@ -35,28 +35,30 @@ static void push_arguments (const char *[], int cnt, void **esp);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 pid_t
-process_execute (const char *cmdline)
+process_execute (const char *file_name)
 {
-  char *cmdline_copy = NULL, *file_name = NULL;
+  char *fn_copy = NULL;  // fn_copy y file_name_2 son copias exactas del file_name
+  char *file_name_2 = NULL;
   char *save_ptr = NULL;
-  struct process_control_block *pcb = NULL;
+  struct process_control_block *pcb = NULL; // para guardar los datos del proceso actual
   tid_t tid;
 
-  /* Make a copy of CMD_LINE.
-     Otherwise there's a race between the caller and load(). */
-  cmdline_copy = palloc_get_page (0);
-  if (cmdline_copy == NULL) {
+  /* Se realiza una copia de la linea de comandos (file_name)
+     de lo contrario se genera una condicion de carrera entre el call y load()
+     caller como halt entre otros */
+  fn_copy = palloc_get_page (0);
+  if (fn_copy == NULL) {
     goto execute_failed;
   }
-  strlcpy (cmdline_copy, cmdline, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE);
 
-  // Extract file_name from cmdline. Should make a copy.
-  file_name = palloc_get_page (0);
-  if (file_name == NULL) {
+  // Extraer el nombre del archivo de file_name haciendo una copia
+  file_name_2 = palloc_get_page (0);
+  if (file_name_2 == NULL) {
     goto execute_failed;
   }
-  strlcpy (file_name, cmdline, PGSIZE);
-  file_name = strtok_r(file_name, " ", &save_ptr);
+  strlcpy (file_name_2, file_name, PGSIZE);
+  file_name_2 = strtok_r(file_name_2, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
 
@@ -72,7 +74,7 @@ process_execute (const char *cmdline)
   // alongwith (determined) 'pid' into 'child_list'), using context switching.
   pcb->pid = PID_INITIALIZING;
 
-  pcb->cmdline = cmdline_copy;
+  pcb->cmdline = fn_copy;
   pcb->waiting = false;
   pcb->exited = false;
   pcb->orphan = false;
@@ -81,31 +83,31 @@ process_execute (const char *cmdline)
   sema_init(&pcb->sema_initialization, 0);
   sema_init(&pcb->sema_wait, 0);
 
-  // create thread!
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, pcb);
+  // creamos el tread con el nombre del archivo que tokenizamos
+  tid = thread_create (file_name_2, PRI_DEFAULT, start_process, pcb);
 
   if (tid == TID_ERROR) {
     goto execute_failed;
   }
 
-  // wait until initialization inside start_process() is complete.
+  // Espera hasta que la inicializacion en start_process termine
   sema_down(&pcb->sema_initialization);
-  if(cmdline_copy) {
-    palloc_free_page (cmdline_copy);
+  if(fn_copy) {
+    palloc_free_page (fn_copy);
   }
 
-  // process successfully created, maintain child process list
+  // Si el proceso es creado exitosamente, el children se mantiene en la lista
   if(pcb->pid >= 0) {
     list_push_back (&(thread_current()->child_list), &(pcb->elem));
   }
 
-  palloc_free_page (file_name);
+  palloc_free_page (file_name_2);
   return pcb->pid;
 
 execute_failed:
   // release allocated memory and return
-  if(cmdline_copy) palloc_free_page (cmdline_copy);
-  if(file_name) palloc_free_page (file_name);
+  if(fn_copy) palloc_free_page (fn_copy);
+  if(file_name_2) palloc_free_page (file_name_2);
   if(pcb) palloc_free_page (pcb);
 
   return PID_ERROR;
@@ -119,24 +121,24 @@ start_process (void *pcb_)
   struct thread *t = thread_current();
   struct process_control_block *pcb = pcb_;
 
-  char *file_name = (char*) pcb->cmdline;
+  char *file_name = (char*) pcb->cmdline; // linea de comandos a tokenizar
   bool success = false;
 
-  // cmdline handling
-  const char **cmdline_tokens = (const char**) palloc_get_page(0);
+  // Arreglo para guardar los argumentos a tokenizar
+  const char **argv = (const char**) palloc_get_page(0);
 
-  if (cmdline_tokens == NULL) {
+  if (argv == NULL) {
     printf("[Error] Kernel Error: Not enough memory\n");
     goto finish_step; // pid being -1, release lock, clean resources
   }
 
   char* token;
   char* save_ptr;
-  int cnt = 0;
+  int argc = 0;
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr))
   {
-    cmdline_tokens[cnt++] = token;
+    argv[argc++] = token;
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -147,20 +149,20 @@ start_process (void *pcb_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   if (success) {
-    push_arguments (cmdline_tokens, cnt, &if_.esp);
+    push_arguments (argv, argc, &if_.esp);
   }
-  palloc_free_page (cmdline_tokens);
+  palloc_free_page (argv);
 
 
 finish_step:
 
-  /* Assign PCB */
-  // we maintain an one-to-one mapping between pid and tid, with identity function.
-  // pid is determined, so interact with process_execute() for maintaining child_list
+  /* Asignamos el process control block para que de esta forma logramos mapear el pid y tid,
+    en base al pid se logra verificar el proceso.
+  */
   pcb->pid = success ? (pid_t)(t->tid) : PID_ERROR;
   t->pcb = pcb;
 
-  // wake up sleeping in process_execute()
+  // Habilita el semaforo par poder despertar a otro proceso.
   sema_up(&pcb->sema_initialization);
 
   /* If load failed, quit. */
@@ -189,60 +191,54 @@ finish_step:
 int
 process_wait (tid_t child_tid)
 {
-  struct thread *t = thread_current ();
-  struct list *child_list = &(t->child_list);
+  //----------------------------------
+  struct thread *thr = thread_current();
+  struct list *children_process= &(thr->child_list);
+  struct process_control_block *c_pcb=NULL;
+  struct list_elem *pos = NULL;
 
-  // lookup the process with tid equals 'child_tid' from 'child_list'
-  struct process_control_block *child_pcb = NULL;
-  struct list_elem *it = NULL;
-
-  if (!list_empty(child_list)) {
-    for (it = list_front(child_list); it != list_end(child_list); it = list_next(it)) {
+  if (!list_empty(children_process)) {// verificar que todavia hay procesos en espera
+    for (pos = list_front(children_process); pos != list_end(children_process); pos = list_next(pos)) {
       struct process_control_block *pcb = list_entry(
-          it, struct process_control_block, elem);
+          pos, struct process_control_block, elem);  // entonces si es diferente al ultimo de la espera, se mete al process control block
+          
 
-      if(pcb->pid == child_tid) { // OK, the direct child found
-        child_pcb = pcb;
+      if(pcb->pid == child_tid) { // verificamos que el pid concida para verificar que sea el proceso correcto
+        c_pcb = pcb;
         break;
       }
     }
   }
 
-  // if child process is not found, return -1 immediately
-  if (child_pcb == NULL) {
-    _DEBUG_PRINTF("[DEBUG] wait(): child not found, pid = %d\n", child_tid);
+  if(c_pcb== NULL){
+    //If process is invalid
     return -1;
   }
-
-  if (child_pcb->waiting) {
-    // already waiting (the parent already called wait on child's pid)
-    _DEBUG_PRINTF("[DEBUG] wait(): child found, pid = %d, but it is already waiting\n", child_tid);
-    return -1; // a process may wait for any fixed child at most once
+  if(c_pcb->waiting){
+    //if process_wait() has already been successfully called
+    return -1;
   }
-  else {
-    child_pcb->waiting = true;
+  else{
+    c_pcb->waiting=true;
   }
 
-  // wait(block) until child terminates
-  // see process_exit() for signaling this semaphore
-  if (! child_pcb->exited) {
-    sema_down(& (child_pcb->sema_wait));
+  if(!c_pcb->exited){
+    sema_down(&(c_pcb->sema_wait));// ya que todavia no ha terminado no subimos el semaforo ya que esta ocupado
   }
-  ASSERT (child_pcb->exited == true);
+  ASSERT(c_pcb->exited==true); //verificamos que el proceso child ya termino
 
-  // remove from child_list
-  ASSERT (it != NULL);
-  list_remove (it);
+//Una vez terminado debemos verificar que salga de la lista
+ASSERT(pos != NULL);
+list_remove(pos);
 
-  // return the exit code of the child process
-  int retcode = child_pcb->exitcode;
+int rcode= c_pcb->exitcode;
+//liberamos el proceso
+palloc_free_page(c_pcb);
 
-  // Now the pcb object of the child process can be finally freed.
-  // (in this context, the child process is guaranteed to have been exited)
-  palloc_free_page(child_pcb);
-
-  return retcode;
+  //----------------------------------
+  return rcode;
 }
+
 
 /* Free the current process's resources. */
 void
@@ -632,25 +628,29 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static void
 push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 {
-  ASSERT(argc >= 0);
+  /* cmdline_tokens es la lista de argumentos 
+     agrc es la cantidad de argumentos enviados 
+     esp es nuestro stack
+  */
+  ASSERT(argc >= 0); //Verificamos si existen argumentos.
 
   int i, len = 0;
   void* argv_addr[argc];
-  for (i = 0; i < argc; i++) {
-    len = strlen(cmdline_tokens[i]) + 1;
-    *esp -= len;
+  for (i = 0; i < argc; i++) {                   //recorremos la lista de argumentos 
+    len = strlen(cmdline_tokens[i]) + 1;         // bajamos el stack por el tamaño del string y el +1 por el valor nullo al final de la cadena
+    *esp -= len;                                 // se baja el para que cada argumento quede en una posicion unica de memoria
     memcpy(*esp, cmdline_tokens[i], len);
-    argv_addr[i] = *esp;
+    argv_addr[i] = *esp;                         //arreglo que contiene la direccion de cada argumento.
   }
 
-  // word align
+  // Alineacion de las palabras y/o argumentos para alinear el stack con la memoria
   *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
 
-  // last null
+  // Escribe la direccion del argv
   *esp -= 4;
   *((uint32_t*) *esp) = 0;
 
-  // setting **esp with argvs
+  // Escribir la direccion de cada argumento del proceso
   for (i = argc - 1; i >= 0; i--) {
     *esp -= 4;
     *((void**) *esp) = argv_addr[i];
@@ -660,11 +660,11 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   *esp -= 4;
   *((void**) *esp) = (*esp + 4);
 
-  // setting argc
+  // Escribir la cantidad de argc (argumentos mas nombre)
   *esp -= 4;
   *((int*) *esp) = argc;
 
-  // setting ret addr
+  // La direccion de retorno debe ser 0
   *esp -= 4;
   *((int*) *esp) = 0;
 

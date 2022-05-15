@@ -222,11 +222,10 @@ void do_open(int num, struct intr_frame *f) {
     return -1;
   }
 
-  fd->file = file_opened; //file save
+  fd->file = file_opened;
 
   struct list* fd_list = &thread_current()->file_descriptors;
   if (list_empty(fd_list)) {
-    // 0, 1, 2 are reserved for stdin, stdout, stderr
     fd->id = 3;
   }
   else {
@@ -397,20 +396,11 @@ void do_not_valid(int num, struct intr_frame *f) {
 }
 
 
-/****************** Helper Functions on Memory Access ********************/
-
 static void
 check_user (const uint8_t *uaddr) {
   if(getU (uaddr) == -1) bad_access();
 }
 
-/**
- * Reads a single 'byte' at user memory admemory at 'uaddr'.
- * 'uaddr' must be below PHYS_BASE.
- *
- * Returns the byte value if successful (extract the least significant byte),
- * or -1 in case of error (a segfault occurred or invalid uaddr)
- */
 static int32_t
 getU (const uint8_t *uaddr) {
   if (((void*)uaddr < PHYS_BASE)) {
@@ -422,11 +412,6 @@ getU (const uint8_t *uaddr) {
   return -1;
 }
 
-/* Writes a single byte (content is 'byte') to user address 'udst'.
- * 'udst' must be below PHYS_BASE.
- *
- * Returns true if successful, false if a segfault occurred.
- */
 static bool
 putU (uint8_t *udst, uint8_t byte) {
   if (((void*)udst < PHYS_BASE)) {
@@ -440,14 +425,6 @@ putU (uint8_t *udst, uint8_t byte) {
 }
 
 
-/**
- * Reads a consecutive `bytes` bytes of user memory with the
- * starting address `src` (uaddr), and writes to dst.
- *
- * Returns the number of bytes read.
- * In case of invalid memory access, exit() is called and consequently
- * the process is terminated with return code -1.
- */
 static int
 load_M (void *src, void *dst, size_t bytes)
 {
@@ -462,8 +439,6 @@ load_M (void *src, void *dst, size_t bytes)
   }
   return (int)bytes;
 }
-
-/****************** Helper Functions on File Access ********************/
 
 static struct file_desc*
 getF(struct thread *t, int fd)
