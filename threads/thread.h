@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -107,6 +107,18 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    // Project 2: file descriptors and process table
+    /* Owned by userprog/process.c and userprog/syscall.c */
+
+    struct process_control_block *pcb;  /* Process Control Block */
+    struct list child_list;             /* List of children processes of this thread,
+                                          each elem is defined by pcb#elem */
+
+    struct list file_descriptors;       /* List of file_descriptors the thread contains */
+
+    struct file *executing_file;        /* The executable file of associated process. */
+    
 #endif
 
     /* Owned by thread.c. */
@@ -159,6 +171,8 @@ void donar(struct thread *t1, struct thread *t2);
 void donar_lock(struct lock *t1, struct thread *t2);
 void donar_original(int priority, struct thread *t);
 void donar_1(int priority, struct thread *t);
+
+struct semaphore l_sem;
 
 void yield(struct thread *t);
 bool sort_priority(const struct list_elem* a, const struct list_elem *b);
