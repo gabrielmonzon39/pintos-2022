@@ -1,8 +1,24 @@
+#include "devices/shutdown.h"
+#include "devices/input.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/palloc.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "threads/synch.h"
+#include "lib/kernel/list.h"
+
+
+#ifdef DEBUG
+#define _DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define _DEBUG_PRINTF(...) /* do nothing */
+#endif
 
 // para sys
 #include "devices/shutdown.h"

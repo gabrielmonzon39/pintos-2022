@@ -1,0 +1,36 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Start Debugging",
+        "type": "gdb",
+        "request": "attach",
+        "remote": true,
+        "target": ":1234",
+        "env": {
+          "GDBMACROS": "/home/pedro/pintos/misc/gdb-macros"
+        },
+        "debugger_args": ["-x", "/home/pedro/pintos/misc/gdb-macros"],
+        "executable": "/home/pedro/pintos/userprog/build/kernel.o",
+        // "cwd": "${workspaceRoot}",
+        "cwd": "/home/pedro/pintos/userprog/build",
+        "valuesFormatting": "prettyPrinters",//"parseText",
+        "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+        ],
+        "autorun": [
+          "-enable-pretty-printing",
+          // "loadusersymbols tests/filesys/extended/dir-empty-name",
+          //"b lib/kernel/debug.c:debug_panic"
+          "b userprog/process.c: process_execute"
+        ]
+      }
+    ]
+  }
