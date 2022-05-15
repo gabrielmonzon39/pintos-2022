@@ -37,10 +37,10 @@ static void push_arguments (const char *[], int cnt, void **esp);
 pid_t
 process_execute (const char *file_name)
 {
-  char *fn_copy = NULL;     // fn_copy y file_name_2 son copias exactas de file_name
+  char *fn_copy = NULL;  // fn_copy y file_name_2 son copias exactas del file_name
   char *file_name_2 = NULL;
   char *save_ptr = NULL;
-  struct process_control_block *pcb = NULL;  // para guardar los datos del proceso actual
+  struct process_control_block *pcb = NULL; // para guardar los datos del proceso actual
   tid_t tid;
 
   /* Se realiza una copia de la linea de comandos (file_name)
@@ -58,7 +58,7 @@ process_execute (const char *file_name)
     goto execute_failed;
   }
   strlcpy (file_name_2, file_name, PGSIZE);
-  file_name_2 = strtok_r(fn_copy, " ", &save_ptr); // extraemos unicamente el nombre del archivo
+  file_name_2 = strtok_r(file_name_2, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
 
@@ -98,7 +98,7 @@ process_execute (const char *file_name)
 
   // Si el proceso es creado exitosamente, el children se mantiene en la lista
   if(pcb->pid >= 0) {
-    list_push_back (&(thread_current()->children_process), &(pcb->elem));
+    list_push_back (&(thread_current()->child_list), &(pcb->elem));
   }
 
   palloc_free_page (file_name_2);
@@ -167,7 +167,7 @@ finish_step:
 
   /* If load failed, quit. */
   if (!success)
-    do_exit (-1);
+    do_exit2 (-1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -193,7 +193,7 @@ process_wait (tid_t child_tid)
 {
   //----------------------------------
   struct thread *thr = thread_current();
-  struct list *children_process= &(thr->children_process);
+  struct list *children_process= &(thr->child_list);
   struct process_control_block *c_pcb=NULL;
   struct list_elem *pos = NULL;
 
@@ -239,6 +239,7 @@ palloc_free_page(c_pcb);
   return rcode;
 }
 
+
 /* Free the current process's resources. */
 void
 process_exit (void)
@@ -257,7 +258,7 @@ process_exit (void)
   }
 
   // 2. clean up pcb object of all children processes
-  struct list *child_list = &cur->children_process;
+  struct list *child_list = &cur->child_list;
   while (!list_empty(child_list)) {
     struct list_elem *e = list_pop_front (child_list);
     struct process_control_block *pcb;
@@ -273,9 +274,9 @@ process_exit (void)
   }
 
   /* Release file for the executable */
-  if(cur->exefile) {
-    file_allow_write(cur->exefile);
-    file_close(cur->exefile);
+  if(cur->executing_file) {
+    file_allow_write(cur->executing_file);
+    file_close(cur->executing_file);
   }
 
   // Unblock the waiting parent process, if any, from wait().
@@ -498,14 +499,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
-  file_deny_write(file);
-  thread_current()->exefile=file;
+  /* Deny writes to executables. */
+  file_deny_write (file);
+  thread_current()->executing_file = file;
 
   success = true;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  //file_close (file); revisar cuando cerrar
+
+  // do not close file here, postpone until it terminates
   return success;
 }
 
