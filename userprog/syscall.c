@@ -13,13 +13,6 @@
 #include "threads/synch.h"
 #include "lib/kernel/list.h"
 
-
-#ifdef DEBUG
-#define _DEBUG_PRINTF(...) printf(__VA_ARGS__)
-#else
-#define _DEBUG_PRINTF(...) /* do nothing */
-#endif
-
 // para sys
 #include "devices/shutdown.h"
 #include "devices/input.h"
