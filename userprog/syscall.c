@@ -48,8 +48,8 @@ syscall_init (void)
 #define true  1
 #define false 0
 #define error -1
-#define size_int 4
-#define size_char_pointer 8
+#define (unsigned) size_int 4
+#define (unsigned) size_char_pointer 8
 
 static void check_num(int num, struct intr_frame *f);
 int not_valid(int num); 
@@ -85,7 +85,7 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int num;
-  CopyPaste(f->esp, &num, size_int);
+  CopyPaste(f->esp, &num, (unsigned) size_int);
   check_num(num, f);
 }
 
@@ -136,7 +136,7 @@ void do_halt(int num, struct intr_frame *f) {
 
 void do_exit(int num, struct intr_frame *f) {
   int exCode_num;
-  CopyPaste(f->esp + 4, &exCode_num, size_int);
+  CopyPaste(f->esp + 4, &exCode_num, (unsigned) size_int);
 
   printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
 
@@ -183,8 +183,8 @@ void do_create(int num, struct intr_frame *f) {
   unsigned int size;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
-  CopyPaste(f->esp + 8, &size, size_int);
+  CopyPaste(f->esp + 4, &name_fl, (unsigned) size_char_pointer);
+  CopyPaste(f->esp + 8, &size, (unsigned) size_int);
 
   check_user((const uint8_t*) name_fl);
 
@@ -199,7 +199,7 @@ void do_remove(int num, struct intr_frame *f) {
   const char* name_fl;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
+  CopyPaste(f->esp + 4, &name_fl, (unsigned) size_char_pointer);
 
   check_user((const uint8_t*) name_fl);
 
@@ -215,7 +215,7 @@ void do_open(int num, struct intr_frame *f) {
   const char* name_fl;
   int x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
+  CopyPaste(f->esp + 4, &name_fl, (unsigned) size_char_pointer);
 
   check_user((const uint8_t*) name_fl);
 
@@ -253,7 +253,7 @@ void do_open(int num, struct intr_frame *f) {
 
 void do_filesize(int num, struct intr_frame *f) {
   int fd, x;
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
 
   struct file_desc* file_d;
 
@@ -276,9 +276,9 @@ void do_read(int num, struct intr_frame *f) {
   void *buffer;
   unsigned int size;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
   CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, size_int);
+  CopyPaste(f->esp + 12, &size, (unsigned) size_int);
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
@@ -317,9 +317,9 @@ void do_write(int num, struct intr_frame *f) {
   const void *buffer;
   unsigned int size;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
   CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, size_int);
+  CopyPaste(f->esp + 12, &size, (unsigned) size_int);
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
@@ -349,8 +349,8 @@ void do_write(int num, struct intr_frame *f) {
 void do_seek(int num, struct intr_frame *f) {
   int fd;
   unsigned int position;
-  CopyPaste(f->esp + 4, &fd, size_int);
-  CopyPaste(f->esp + 8, &position, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
+  CopyPaste(f->esp + 8, &position, (unsigned) size_int);
 
 
   lock_acquire (&lock_);
@@ -369,7 +369,7 @@ void do_tell(int num, struct intr_frame *f) {
   int fd;
   unsigned x;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
 
   lock_acquire (&lock_);
   struct file_desc* file_d = getF(thread_current(), fd);
@@ -388,7 +388,7 @@ void do_tell(int num, struct intr_frame *f) {
 
 void do_close(int num, struct intr_frame *f) {
   int fd;
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, (unsigned) size_int);
 
   lock_acquire (&lock_);
   struct file_desc* file_d = getF(thread_current(), fd);
