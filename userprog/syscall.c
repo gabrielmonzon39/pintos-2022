@@ -27,12 +27,12 @@
 static void syscall_handler (struct intr_frame *);
 
 // approach del lock
-struct lock lock_;
+struct lock filesys_lock;
 
 void
 syscall_init (void)
 {
-  lock_init (&lock_);
+  lock_init (&filesys_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -41,9 +41,6 @@ syscall_init (void)
 #define byte__ 0xFF
 #define true  1
 #define false 0
-#define error -1
-#define size_int 4
-#define size_char_pointer 8
 
 static void check_num(int num, struct intr_frame *f);
 int not_valid(int num); 
@@ -79,7 +76,7 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int num;
-  CopyPaste(f->esp, &num, size_int);
+  CopyPaste(f->esp, &num, sizeof(num));
   check_num(num, f);
 }
 
@@ -130,9 +127,9 @@ void do_halt(int num, struct intr_frame *f) {
 
 void do_exit(int num, struct intr_frame *f) {
   int exCode_num;
-  CopyPaste(f->esp + 4, &exCode_num, size_int);
+  CopyPaste(f->esp + 4, &exCode_num, sizeof(exCode_num));
 
-  //printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
+  printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
 
   struct process_control_block *pcb = thread_current()->pcb;
   if (pcb == NULL) thread_exit();
@@ -144,7 +141,7 @@ void do_exit(int num, struct intr_frame *f) {
 }
 
 void do_exit2 (int num) {
-  //printf("%s: exit(%d)\n", thread_current()->name, num);
+  printf("%s: exit(%d)\n", thread_current()->name, num);
   struct process_control_block *pcb = thread_current()->pcb;
   if (pcb == NULL) thread_exit();
   if (pcb != NULL) {
@@ -159,9 +156,9 @@ void do_execute(int num, struct intr_frame *f) {
   CopyPaste(f->esp + 4, &var, sizeof(var));
 
   check_user((const uint8_t*) var);
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock); //
   pid_t pid = process_execute(var);
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
   f->eax = (uint32_t) pid;
 }
@@ -174,17 +171,17 @@ void do_wait(int num, struct intr_frame *f) {
 
 void do_create(int num, struct intr_frame *f) {
   const char* name_fl;
-  unsigned int size;
+  unsigned size;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
-  CopyPaste(f->esp + 8, &size, size_int);
+  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
+  CopyPaste(f->esp + 8, &size, sizeof(size));
 
   check_user((const uint8_t*) name_fl);
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   x = filesys_create(name_fl, size);
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
   f->eax = x;
 }
@@ -193,13 +190,13 @@ void do_remove(int num, struct intr_frame *f) {
   const char* name_fl;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
+  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
 
   check_user((const uint8_t*) name_fl);
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   x = filesys_remove(name_fl);
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
 
   f->eax = x;
@@ -209,22 +206,22 @@ void do_open(int num, struct intr_frame *f) {
   const char* name_fl;
   int x;
 
-  CopyPaste(f->esp + 4, &name_fl, size_char_pointer);
+  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
 
   check_user((const uint8_t*) name_fl);
 
   struct file* file_opened;
   struct file_desc* fd = palloc_get_page(0);
   if (!fd) {
-    return error;
+    return -1;
   }
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   file_opened = filesys_open(name_fl);
   if (!file_opened) {
     palloc_free_page (fd);
-    lock_release (&lock_);
-    return error;
+    lock_release (&filesys_lock);
+    return -1;
   }
 
   fd->file = file_opened;
@@ -239,7 +236,7 @@ void do_open(int num, struct intr_frame *f) {
   list_push_back(fd_list, &(fd->elem));
   // list_insert_ordered (&fd_list, &fd->elem, sort, NULL); 
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
 
   f->eax = fd->id;
@@ -247,20 +244,20 @@ void do_open(int num, struct intr_frame *f) {
 
 void do_filesize(int num, struct intr_frame *f) {
   int fd, x;
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
 
   struct file_desc* file_d;
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   file_d = getF(thread_current(), fd);
 
   if(file_d == NULL) {
-    lock_release (&lock_);
-    return error;
+    lock_release (&filesys_lock);
+    return -1;
   }
 
   int ret = file_length(file_d->file);
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
   f->eax = ret;
 }
@@ -268,16 +265,16 @@ void do_filesize(int num, struct intr_frame *f) {
 void do_read(int num, struct intr_frame *f) {
   int fd, x;
   void *buffer;
-  unsigned int size;
+  unsigned size;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
   CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, size_int);
+  CopyPaste(f->esp + 12, &size, sizeof(size));
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   int ret;
 
   if(fd != 0) {
@@ -287,21 +284,21 @@ void do_read(int num, struct intr_frame *f) {
       ret = file_read(file_d->file, buffer, size);
     }
     else {
-      ret = error;
+      ret = -1;
     }
   }
   else {
     unsigned i;
     for(i = 0; i < size; ++i) {
       if(! putU(buffer + i, input_getc()) ) {
-        lock_release (&lock_);
-        do_exit(error, f); // error segmentation fault
+        lock_release (&filesys_lock);
+        do_exit(-1, f); // error segmentation fault
       }
     }
     ret = size;
   }
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
   f->eax = (uint32_t) ret;
 }
@@ -309,16 +306,16 @@ void do_read(int num, struct intr_frame *f) {
 void do_write(int num, struct intr_frame *f) {
   int fd, x;
   const void *buffer;
-  unsigned int size;
+  unsigned size;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
   CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, size_int);
+  CopyPaste(f->esp + 12, &size, sizeof(size));
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   int ret;
 
   if(fd != 1) {
@@ -328,13 +325,13 @@ void do_write(int num, struct intr_frame *f) {
       ret = file_write(file_d->file, buffer, size);
     }
     else 
-      ret = error;
+      ret = -1;
   }else {
     putbuf(buffer, size);
     ret = size;
   }
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
 
   f->eax = (uint32_t) ret;
@@ -342,12 +339,12 @@ void do_write(int num, struct intr_frame *f) {
 
 void do_seek(int num, struct intr_frame *f) {
   int fd;
-  unsigned int position;
-  CopyPaste(f->esp + 4, &fd, size_int);
-  CopyPaste(f->esp + 8, &position, size_int);
+  unsigned position;
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+  CopyPaste(f->esp + 8, &position, sizeof(position));
 
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   struct file_desc* file_d = getF(thread_current(), fd);
 
   if(file_d && file_d->file) {
@@ -356,16 +353,16 @@ void do_seek(int num, struct intr_frame *f) {
   else
     return;
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 }
 
 void do_tell(int num, struct intr_frame *f) {
   int fd;
   unsigned x;
 
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   struct file_desc* file_d = getF(thread_current(), fd);
 
   unsigned ret;
@@ -373,18 +370,18 @@ void do_tell(int num, struct intr_frame *f) {
     ret = file_tell(file_d->file);
   }
   else
-    ret = error;
+    ret = -1;
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 
   f->eax = (uint32_t) ret;
 }
 
 void do_close(int num, struct intr_frame *f) {
   int fd;
-  CopyPaste(f->esp + 4, &fd, size_int);
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
 
-  lock_acquire (&lock_);
+  lock_acquire (&filesys_lock);
   struct file_desc* file_d = getF(thread_current(), fd);
 
   if(file_d && file_d->file) {
@@ -393,33 +390,54 @@ void do_close(int num, struct intr_frame *f) {
     palloc_free_page(file_d);
   }
 
-  lock_release (&lock_);
+  lock_release (&filesys_lock);
 }
 
 void do_not_valid(int num, struct intr_frame *f) {
-  //printf("[ERROR] system call %d is unimplemented!\n", num);
-  do_exit(error, f);
+  printf("[ERROR] system call %d is unimplemented!\n", num);
+  do_exit(-1, f);
 }
 
 static void errorOnMemory(void) {
-  if (lock_held_by_current_thread(&lock_))
-    lock_release (&lock_);
-  do_exit2 (error);
+  if (lock_held_by_current_thread(&filesys_lock))
+    lock_release (&filesys_lock);
+  do_exit2 (-1);
 }
 
 
 static void check_user (const uint8_t *b) {
-  if(getU(b) == error) 
-    errorOnMemory();
+    if(getU(b) == -1) 
+        errorOnMemory();
 }
+
+static int32_t getU (const uint8_t *uaddr) {
+  if (( (void*)uaddr < PHYS_BASE)) {
+    int result;
+    asm ("movl $1f, %0; movzbl %1, %0; 1:"
+        : "=&a" (result) : "m" (*uaddr));
+    return result;
+  }
+  return -1;
+}
+
+static bool putU (uint8_t *udst, uint8_t byte) {
+  if (( (void*) udst < PHYS_BASE)) {
+    int error_code;
+    asm ("movl $1f, %0; movb %b2, %1; 1:"
+        : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+    return error_code != -1;
+  }
+    return false;
+
+}
+
 
 static void CopyPaste (void *from, void *to, size_t num) {
   int32_t x;
-  char *pointer = (char *) to; 
   for(size_t i = 0; i < num; i++) {
     x = getU(from + i);
-    if(x == error) errorOnMemory();
-    *(pointer + i) = x;
+    if(x == -1) errorOnMemory();
+    *(char*)(to + i) = x & byte__;
   }
 }
 
@@ -432,25 +450,4 @@ static struct file_desc* getF(struct thread *threed, int file_d) {
         if(list_entry(ele, struct file_desc, elem)->id == file_d) return desc;
 
     return NULL;
-}
-
-static int32_t getU (const uint8_t *uaddr) {
-  if (( (void*)uaddr < PHYS_BASE)) {
-    int result;
-    asm ("movl $1f, %0; movzbl %1, %0; 1:"
-        : "=&a" (result) : "m" (*uaddr));
-    return result;
-  }
-  return error;
-}
-
-static bool putU (uint8_t *udst, uint8_t byte) {
-  if (( (void*) udst < PHYS_BASE)) {
-    int error_code;
-    asm ("movl $1f, %0; movb %b2, %1; 1:"
-        : "=&a" (error_code), "=m" (*udst) : "q" (byte));
-    return error_code != error;
-  }
-    return false;
-
 }
