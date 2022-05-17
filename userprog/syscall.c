@@ -28,7 +28,6 @@ static void syscall_handler (struct intr_frame *);
 
 // approach del lock
 struct lock filesys_lock;
-
 void
 syscall_init (void)
 {
@@ -39,8 +38,6 @@ syscall_init (void)
 ////////////////////////////     AGREGADO      ////////////////////////////
 ////////////////////////////   DEFINICIONES    ////////////////////////////
 #define byte__ 0xFF
-#define true  1
-#define false 0
 
 static void check_num(int num, struct intr_frame *f);
 int not_valid(int num); 
@@ -65,18 +62,27 @@ void do_exit2(int num);
 static void check_user (const uint8_t *uaddr);
 static int32_t getU (const uint8_t *uaddr);
 static bool putU (uint8_t *udst, uint8_t byte);
-static void CopyPaste (void *src, void *des, size_t bytes);
+static int load_M (void *src, void *des, size_t bytes);
 
 static struct file_desc* getF(struct thread *, int fd);
 
+// in case of invalid memory access, fail and exit.
+static void bad_access(void) {
+  if (lock_held_by_current_thread(&filesys_lock))
+    lock_release (&filesys_lock);
+
+  do_exit2 (-1);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
+
 
 // Cambiando el handler, para mayor orden
 static void
 syscall_handler (struct intr_frame *f)
 {
   int num;
-  CopyPaste(f->esp, &num, sizeof(num));
+  load_M(f->esp, &num, sizeof(num));
   check_num(num, f);
 }
 
@@ -116,9 +122,8 @@ static void check_num(int num, struct intr_frame *f) {
 
 
 int not_valid(int num) {
-  if (num >= 0 && num <= 12) 
-    return false;
-  return true;
+  if (num >= 0 && num <= 12) return 0;
+  return 1;
 }
 
 void do_halt(int num, struct intr_frame *f) {
@@ -127,7 +132,7 @@ void do_halt(int num, struct intr_frame *f) {
 
 void do_exit(int num, struct intr_frame *f) {
   int exCode_num;
-  CopyPaste(f->esp + 4, &exCode_num, sizeof(exCode_num));
+  load_M(f->esp + 4, &exCode_num, sizeof(exCode_num));
 
   printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
 
@@ -153,7 +158,7 @@ void do_exit2 (int num) {
 
 void do_execute(int num, struct intr_frame *f) {
   void* var;
-  CopyPaste(f->esp + 4, &var, sizeof(var));
+  load_M(f->esp + 4, &var, sizeof(var));
 
   check_user((const uint8_t*) var);
   lock_acquire (&filesys_lock); //
@@ -165,7 +170,7 @@ void do_execute(int num, struct intr_frame *f) {
 
 void do_wait(int num, struct intr_frame *f) {
   pid_t pid;
-  CopyPaste(f->esp + 4, &pid, sizeof(pid_t));
+  load_M(f->esp + 4, &pid, sizeof(pid_t));
   f->eax = (uint32_t) process_wait(pid);
 }
 
@@ -174,9 +179,10 @@ void do_create(int num, struct intr_frame *f) {
   unsigned size;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
-  CopyPaste(f->esp + 8, &size, sizeof(size));
+  load_M(f->esp + 4, &name_fl, sizeof(name_fl));
+  load_M(f->esp + 8, &size, sizeof(size));
 
+  // memory validation
   check_user((const uint8_t*) name_fl);
 
   lock_acquire (&filesys_lock);
@@ -190,8 +196,9 @@ void do_remove(int num, struct intr_frame *f) {
   const char* name_fl;
   bool x;
 
-  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
+  load_M(f->esp + 4, &name_fl, sizeof(name_fl));
 
+  // memory validation
   check_user((const uint8_t*) name_fl);
 
   lock_acquire (&filesys_lock);
@@ -206,7 +213,7 @@ void do_open(int num, struct intr_frame *f) {
   const char* name_fl;
   int x;
 
-  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
+  load_M(f->esp + 4, &name_fl, sizeof(name_fl));
 
   check_user((const uint8_t*) name_fl);
 
@@ -244,7 +251,7 @@ void do_open(int num, struct intr_frame *f) {
 
 void do_filesize(int num, struct intr_frame *f) {
   int fd, x;
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 4, &fd, sizeof(fd));
 
   struct file_desc* file_d;
 
@@ -267,9 +274,9 @@ void do_read(int num, struct intr_frame *f) {
   void *buffer;
   unsigned size;
 
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
-  CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, sizeof(size));
+  load_M(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 8, &buffer, sizeof(buffer));
+  load_M(f->esp + 12, &size, sizeof(size));
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
@@ -292,7 +299,7 @@ void do_read(int num, struct intr_frame *f) {
     for(i = 0; i < size; ++i) {
       if(! putU(buffer + i, input_getc()) ) {
         lock_release (&filesys_lock);
-        do_exit(-1, f); // error segmentation fault
+        do_exit(-1, f); // segfault
       }
     }
     ret = size;
@@ -308,9 +315,9 @@ void do_write(int num, struct intr_frame *f) {
   const void *buffer;
   unsigned size;
 
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
-  CopyPaste(f->esp + 8, &buffer, sizeof(buffer));
-  CopyPaste(f->esp + 12, &size, sizeof(size));
+  load_M(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 8, &buffer, sizeof(buffer));
+  load_M(f->esp + 12, &size, sizeof(size));
 
   check_user((const uint8_t*) buffer);
   check_user((const uint8_t*) buffer + size - 1);
@@ -340,8 +347,8 @@ void do_write(int num, struct intr_frame *f) {
 void do_seek(int num, struct intr_frame *f) {
   int fd;
   unsigned position;
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
-  CopyPaste(f->esp + 8, &position, sizeof(position));
+  load_M(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 8, &position, sizeof(position));
 
 
   lock_acquire (&filesys_lock);
@@ -360,7 +367,7 @@ void do_tell(int num, struct intr_frame *f) {
   int fd;
   unsigned x;
 
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 4, &fd, sizeof(fd));
 
   lock_acquire (&filesys_lock);
   struct file_desc* file_d = getF(thread_current(), fd);
@@ -379,7 +386,7 @@ void do_tell(int num, struct intr_frame *f) {
 
 void do_close(int num, struct intr_frame *f) {
   int fd;
-  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+  load_M(f->esp + 4, &fd, sizeof(fd));
 
   lock_acquire (&filesys_lock);
   struct file_desc* file_d = getF(thread_current(), fd);
@@ -389,7 +396,6 @@ void do_close(int num, struct intr_frame *f) {
     list_remove(&(file_d->elem));
     palloc_free_page(file_d);
   }
-
   lock_release (&filesys_lock);
 }
 
@@ -398,20 +404,15 @@ void do_not_valid(int num, struct intr_frame *f) {
   do_exit(-1, f);
 }
 
-static void errorOnMemory(void) {
-  if (lock_held_by_current_thread(&filesys_lock))
-    lock_release (&filesys_lock);
-  do_exit2 (-1);
+
+static void
+check_user (const uint8_t *uaddr) {
+  if(getU (uaddr) == -1) bad_access();
 }
 
-
-static void check_user (const uint8_t *b) {
-    if(getU(b) == -1) 
-        errorOnMemory();
-}
-
-static int32_t getU (const uint8_t *uaddr) {
-  if (( (void*)uaddr < PHYS_BASE)) {
+static int32_t
+getU (const uint8_t *uaddr) {
+  if (((void*)uaddr < PHYS_BASE)) {
     int result;
     asm ("movl $1f, %0; movzbl %1, %0; 1:"
         : "=&a" (result) : "m" (*uaddr));
@@ -420,8 +421,9 @@ static int32_t getU (const uint8_t *uaddr) {
   return -1;
 }
 
-static bool putU (uint8_t *udst, uint8_t byte) {
-  if (( (void*) udst < PHYS_BASE)) {
+static bool
+putU (uint8_t *udst, uint8_t byte) {
+  if (((void*)udst < PHYS_BASE)) {
     int error_code;
     asm ("movl $1f, %0; movb %b2, %1; 1:"
         : "=&a" (error_code), "=m" (*udst) : "q" (byte));
@@ -432,22 +434,35 @@ static bool putU (uint8_t *udst, uint8_t byte) {
 }
 
 
-static void CopyPaste (void *from, void *to, size_t num) {
-  int32_t x;
-  for(size_t i = 0; i < num; i++) {
-    x = getU(from + i);
-    if(x == -1) errorOnMemory();
-    *(char*)(to + i) = x & byte__;
+static int
+load_M (void *src, void *dst, size_t bytes)
+{
+  int32_t num;
+  size_t i;
+  for(i=0; i<bytes; i++) {
+    num = getU(src + i);
+    if(num == -1)
+      bad_access();
+
+    *(char*)(dst + i) = num & byte__;
   }
+  return (int)bytes;
 }
 
-static struct file_desc* getF(struct thread *threed, int file_d) {
-    if (file_d < 3) return NULL;
+static struct file_desc*
+getF(struct thread *t, int fd)
+{
+  //ASSERT (t != NULL);
 
-    if (list_empty(&threed->file_descriptors)) return NULL;
+  if (fd < 3) return NULL;
+
+  struct list_elem *e;
+
+  if (list_empty(&t->file_descriptors)) return NULL;
   
-    for(struct list_elem *ele = list_begin(&threed->file_descriptors); ele != list_end(&threed->file_descriptors); ele = list_next(ele))
-        if(list_entry(ele, struct file_desc, elem)->id == file_d) return desc;
+  for(struct list_elem *e = list_begin(&t->file_descriptors); e != list_end(&t->file_descriptors); e = list_next(e)) {
+    struct file_desc *desc = list_entry(e, struct file_desc, elem);
+    if(desc->id == fd) return desc;
+  }
 
-    return NULL;
 }
