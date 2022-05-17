@@ -24,7 +24,13 @@
 #include "threads/synch.h"
 #include "lib/kernel/list.h"
 
-static void syscall_handler (struct intr_frame *);
+#ifdef DEBUG
+#define _DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define _DEBUG_PRINTF(...) /* do nothing */
+#endif
+
+static void syscall_handler (struct intr_frame *f);
 
 // approach del lock
 struct lock lock_;
@@ -132,7 +138,7 @@ void do_exit(int num, struct intr_frame *f) {
   int exCode_num;
   CopyPaste(f->esp + 4, &exCode_num, size_int);
 
-  //printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
+  printf("%s: exit(%d)\n", thread_current()->name, exCode_num);
 
   struct process_control_block *pcb = thread_current()->pcb;
   if (pcb == NULL) thread_exit();
@@ -144,7 +150,7 @@ void do_exit(int num, struct intr_frame *f) {
 }
 
 void do_exit2 (int num) {
-  //printf("%s: exit(%d)\n", thread_current()->name, num);
+  printf("%s: exit(%d)\n", thread_current()->name, num);
   struct process_control_block *pcb = thread_current()->pcb;
   if (pcb == NULL) thread_exit();
   if (pcb != NULL) {
@@ -397,7 +403,7 @@ void do_close(int num, struct intr_frame *f) {
 }
 
 void do_not_valid(int num, struct intr_frame *f) {
-  //printf("[ERROR] system call %d is unimplemented!\n", num);
+  printf("[ERROR] system call %d is unimplemented!\n", num);
   do_exit(error, f);
 }
 
