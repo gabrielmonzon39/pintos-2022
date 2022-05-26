@@ -25,6 +25,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_arguments (const char *[], int cnt, void **esp);
+static void setup_stack (const char *[], int argc, void **esp);
 
 /* Starts a new thread running a user program loaded from
    `cmdline`. The new thread may be scheduled (and may even exit)
@@ -145,7 +146,7 @@ start_process (void *pcb_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   if (success) {
-    push_arguments (argv, argc, &if_.esp);
+    setup_stack(argv, argc, &if_.esp);
   }
   palloc_free_page (argv);
 
@@ -382,7 +383,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+//static void setup_stack (const char *[], int argc, void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -489,8 +490,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
-    goto done;
+  //if (!setup_stack (esp))
+    //goto done;
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -621,9 +622,75 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Push arguments into the stack region of user program
  * (specified by esp), according to the calling convention.
  */
-static void
+/*static void
 push_arguments (const char* cmdline_tokens[], int argc, void **esp)
 {
+  /* cmdline_tokens es la lista de argumentos 
+     agrc es la cantidad de argumentos enviados 
+     esp es nuestro stack
+  /
+  ASSERT(argc >= 0); //Verificamos si existen argumentos.
+
+  int i, len = 0;
+  void* argv_addr[argc];
+  for (i = 0; i < argc; i++) {                   //recorremos la lista de argumentos 
+    len = strlen(cmdline_tokens[i]) + 1;         // bajamos el stack por el tamaño del string y el +1 por el valor nullo al final de la cadena
+    *esp -= len;                                 // se baja el para que cada argumento quede en una posicion unica de memoria
+    memcpy(*esp, cmdline_tokens[i], len);
+    argv_addr[i] = *esp;                         //arreglo que contiene la direccion de cada argumento.
+  }
+
+  // Alineacion de las palabras y/o argumentos para alinear el stack con la memoria
+  *esp = (void*)((unsigned int)(*esp) & 0xfffffffc);
+
+  // Escribe la direccion del argv
+  *esp -= 4;
+  *((uint32_t*) *esp) = 0;
+
+  // Escribir la direccion de cada argumento del proceso
+  for (i = argc - 1; i >= 0; i--) {
+    *esp -= 4;
+    *((void**) *esp) = argv_addr[i];
+  }
+
+  // setting **argv (addr of stack, esp)
+  *esp -= 4;
+  *((void**) *esp) = (*esp + 4);
+
+  // Escribir la cantidad de argc (argumentos mas nombre)
+  *esp -= 4;
+  *((int*) *esp) = argc;
+
+  // La direccion de retorno debe ser 0
+  *esp -= 4;
+  *((int*) *esp) = 0;
+
+}//*/
+
+
+/* Create a minimal stack by mapping a zeroed page at the top of
+   user virtual memory. */
+static void
+setup_stack(const char* cmdline_tokens[], int argc, void **esp)
+{
+
+  uint8_t *kpage;
+  bool success = false;
+
+  kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+  if (kpage != NULL)
+  {
+    success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
+    if (success)
+    {
+      *esp = PHYS_BASE;
+    }
+    else
+    {
+      palloc_free_page(kpage);
+    }
+  }
+  
   /* cmdline_tokens es la lista de argumentos 
      agrc es la cantidad de argumentos enviados 
      esp es nuestro stack
@@ -663,33 +730,6 @@ push_arguments (const char* cmdline_tokens[], int argc, void **esp)
   // La direccion de retorno debe ser 0
   *esp -= 4;
   *((int*) *esp) = 0;
-
-}
-
-
-/* Create a minimal stack by mapping a zeroed page at the top of
-   user virtual memory. */
-static bool
-setup_stack(void **esp)
-{
-
-  uint8_t *kpage;
-  bool success = false;
-
-  kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
-  {
-    success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE);
-    if (success)
-    {
-      *esp = PHYS_BASE;
-    }
-    else
-    {
-      palloc_free_page(kpage);
-    }
-  }
-  
   return success;
 }
 
