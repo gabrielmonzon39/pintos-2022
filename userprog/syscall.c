@@ -204,8 +204,7 @@ void do_remove(int num, struct intr_frame *f) {
 }
 
 void do_open(int num, struct intr_frame *f) {
-  shutdown_power_off();
-  /*const char* name_fl;
+  const char* name_fl;
   int x;
 
   CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
@@ -241,7 +240,7 @@ void do_open(int num, struct intr_frame *f) {
   lock_release (&lock_);
 
 
-  f->eax = fd->id;*/
+  f->eax = fd->id;
 }
 
 void do_filesize(int num, struct intr_frame *f) {
@@ -382,8 +381,7 @@ void do_tell(int num, struct intr_frame *f) {
 }
 
 void do_close(int num, struct intr_frame *f) {
-  shutdown_power_off();
-  /*int fd;
+  int fd;
   CopyPaste(f->esp + 4, &fd, sizeof(fd));
 
   lock_acquire (&lock_);
@@ -394,7 +392,7 @@ void do_close(int num, struct intr_frame *f) {
     list_remove(&(file_d->elem));
     palloc_free_page(file_d);
   }
-  lock_release (&lock_);*/
+  lock_release (&lock_);
 }
 
 void do_not_valid(int num, struct intr_frame *f) {
