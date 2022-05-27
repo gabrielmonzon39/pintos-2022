@@ -108,16 +108,10 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 
-    // Project 2: file descriptors and process table
-    /* Owned by userprog/process.c and userprog/syscall.c */
-
-    struct process_control_block *pcb;  /* Process Control Block */
-    struct list child_list;             /* List of children processes of this thread,
-                                          each elem is defined by pcb#elem */
-
-    struct list file_descriptors;       /* List of file_descriptors the thread contains */
-
-    struct file *executing_file;        /* The executable file of associated process. */
+    struct file *executing_file;
+    struct process_control_block *pcb;
+    struct list child_list;
+    struct list file_descriptors;
     
 #endif
 

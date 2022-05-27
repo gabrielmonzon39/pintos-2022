@@ -45,37 +45,46 @@ process_execute (const char *file_name)
      caller como halt entre otros */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL) {
-    goto execute_failed;
+    if(fn_copy) palloc_free_page (fn_copy);
+    if(file_name_2) palloc_free_page (file_name_2);
+    if(pcb) palloc_free_page (pcb);
+    return PID_ERROR;
   }
+
   strlcpy (fn_copy, file_name, PGSIZE);
 
   // Extraer el nombre del archivo de file_name haciendo una copia
   file_name_2 = palloc_get_page (0);
+
   if (file_name_2 == NULL) {
-    goto execute_failed;
+    if(fn_copy) palloc_free_page (fn_copy);
+    if(file_name_2) palloc_free_page (file_name_2);
+    if(pcb) palloc_free_page (pcb);
+    return PID_ERROR;
   }
+
   strlcpy (file_name_2, file_name, PGSIZE);
   file_name_2 = strtok_r(file_name_2, " ", &save_ptr);
 
-  /* Create a new thread to execute FILE_NAME. */
+  // Crear un nueuvo thread que ejecute el filename.
 
-  // Create a PCB, along with file_name, and pass it into thread_create
-  // so that a newly created thread can hold the PCB of process to be executed.
+  // Crea un PCB
   pcb = palloc_get_page(0);
+
   if (pcb == NULL) {
-    goto execute_failed;
+    if(fn_copy) palloc_free_page (fn_copy);
+    if(file_name_2) palloc_free_page (file_name_2);
+    if(pcb) palloc_free_page (pcb);
+    return PID_ERROR;
   }
 
-  // pid is not set yet. Later, in start_process(), it will be determined.
-  // so we have to postpone afterward actions (such as putting 'pcb'
-  // alongwith (determined) 'pid' into 'child_list'), using context switching.
   pcb->pid = PID_INITIALIZING;
 
   pcb->cmdline = fn_copy;
   pcb->waiting = false;
   pcb->exited = false;
   pcb->orphan = false;
-  pcb->exitcode = -1; // undefined
+  pcb->exitcode = -1; // indefinido
 
   sema_init(&pcb->sema_initialization, 0);
   sema_init(&pcb->sema_wait, 0);
@@ -84,7 +93,10 @@ process_execute (const char *file_name)
   tid = thread_create (file_name_2, PRI_DEFAULT, start_process, pcb);
 
   if (tid == TID_ERROR) {
-    goto execute_failed;
+    if(fn_copy) palloc_free_page (fn_copy);
+    if(file_name_2) palloc_free_page (file_name_2);
+    if(pcb) palloc_free_page (pcb);
+    return PID_ERROR;
   }
 
   // Espera hasta que la inicializacion en start_process termine
@@ -101,8 +113,7 @@ process_execute (const char *file_name)
   palloc_free_page (file_name_2);
   return pcb->pid;
 
-execute_failed:
-  // release allocated memory and return
+  // liberar recursos
   if(fn_copy) palloc_free_page (fn_copy);
   if(file_name_2) palloc_free_page (file_name_2);
   if(pcb) palloc_free_page (pcb);
@@ -206,13 +217,11 @@ process_wait (tid_t child_tid)
       }
     }
   }
-
+  // Proceso invalido
   if(c_pcb== NULL){
-    //If process is invalid
     return -1;
   }
   if(c_pcb->waiting){
-    //if process_wait() has already been successfully called
     return -1;
   }
   else{
@@ -244,60 +253,40 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  /* Resources should be cleaned up */
-  // 1. file descriptors
   struct list *fdlist = &cur->file_descriptors;
   while (!list_empty(fdlist)) {
     struct list_elem *e = list_pop_front (fdlist);
     struct file_desc *desc = list_entry(e, struct file_desc, elem);
     file_close(desc->file);
-    palloc_free_page(desc); // see sys_open()
+    palloc_free_page(desc);
   }
 
-  // 2. clean up pcb object of all children processes
   struct list *child_list = &cur->child_list;
   while (!list_empty(child_list)) {
     struct list_elem *e = list_pop_front (child_list);
     struct process_control_block *pcb;
     pcb = list_entry(e, struct process_control_block, elem);
     if (pcb->exited == true) {
-      // pcb can freed when it is already terminated
       palloc_free_page (pcb);
     } else {
-      // the child process becomes an orphan.
-      // do not free pcb yet, postpone until the child terminates
       pcb->orphan = true;
     }
   }
 
-  /* Release file for the executable */
   if(cur->executing_file) {
     file_allow_write(cur->executing_file);
     file_close(cur->executing_file);
   }
 
-  // Unblock the waiting parent process, if any, from wait().
-  // now its resource (pcb on page, etc.) can be freed.
   sema_up (&cur->pcb->sema_wait);
 
-  // Destroy the pcb object by itself, if it is orphan.
-  // see (part 2) of above.
   if (cur->pcb->orphan == true) {
     palloc_free_page (& cur->pcb);
   }
 
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL)
     {
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
