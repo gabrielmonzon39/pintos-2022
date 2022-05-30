@@ -186,7 +186,19 @@ void do_create(int num, struct intr_frame *f) {
 }
 
 void do_remove(int num, struct intr_frame *f) {
-  shutdown_power_off();
+  const char* name_fl;
+  bool x;
+
+  CopyPaste(f->esp + 4, &name_fl, sizeof(name_fl));
+
+  if(getU ((uint8_t*) name_fl) == error__) errorOnMemory();
+
+  lock_acquire (&lock_);
+  x = filesys_remove(name_fl);
+  lock_release (&lock_);
+
+
+  f->eax = x;
 }
 
 void do_open(int num, struct intr_frame *f) {
@@ -230,7 +242,23 @@ void do_open(int num, struct intr_frame *f) {
 }
 
 void do_filesize(int num, struct intr_frame *f) {
-  shutdown_power_off();
+  int fd, x;
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+
+  struct file_desc* file_d;
+
+  lock_acquire (&lock_);
+  file_d = getF(thread_current(), fd);
+
+  if(file_d == NULL) {
+    lock_release (&lock_);
+    return error__;
+  }
+
+  int ret = file_length(file_d->file);
+  lock_release (&lock_);
+
+  f->eax = ret;
 }
 
 void do_read(int num, struct intr_frame *f) {
@@ -311,11 +339,43 @@ void do_write(int num, struct intr_frame *f) {
 }
 
 void do_seek(int num, struct intr_frame *f) {
-  shutdown_power_off();
+  int fd;
+  unsigned position;
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+  CopyPaste(f->esp + 8, &position, sizeof(position));
+
+
+  lock_acquire (&lock_);
+  struct file_desc* file_d = getF(thread_current(), fd);
+
+  if(file_d && file_d->file) {
+    file_seek(file_d->file, position);
+  }
+  else
+    return;
+
+  lock_release (&lock_);
 }
 
 void do_tell(int num, struct intr_frame *f) {
-  shutdown_power_off();
+  int fd;
+  unsigned x;
+
+  CopyPaste(f->esp + 4, &fd, sizeof(fd));
+
+  lock_acquire (&lock_);
+  struct file_desc* file_d = getF(thread_current(), fd);
+
+  unsigned ret;
+  if(file_d && file_d->file) {
+    ret = file_tell(file_d->file);
+  }
+  else
+    ret = error__;
+
+  lock_release (&lock_);
+
+  f->eax = (uint32_t) ret;
 }
 
 void do_close(int num, struct intr_frame *f) {
